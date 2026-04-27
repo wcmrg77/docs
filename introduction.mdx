@@ -1,0 +1,65 @@
+---
+title: "TalkPilot Documentation"
+description: "Learn how to configure AI agents, manage your call center, and integrate with external systems."
+---
+
+## Documentation sections
+
+<CardGroup cols={2}>
+  <Card title="Product Guide" icon="book-open" href="/product/overview">
+    How to use the TalkPilot Dashboard — agents, tools, employees, and more
+  </Card>
+  <Card title="Use Cases" icon="lightbulb" href="/use-cases/receptionist">
+    Step-by-step setup guides for common scenarios
+  </Card>
+  <Card title="API Resources" icon="code" href="/api/agents">
+    Detailed docs for each API resource with schemas and examples
+  </Card>
+  <Card title="Guides" icon="compass" href="/guides/pagination">
+    Developer guides for pagination, errors, rate limiting, webhooks
+  </Card>
+  <Card title="Code Examples" icon="terminal" href="/examples/curl">
+    Ready-to-use code in cURL, JavaScript, and Python
+  </Card>
+  <Card title="API Reference" icon="rectangle-terminal" href="/api-reference">
+    Full OpenAPI specification with all endpoints
+  </Card>
+</CardGroup>
+
+## Quick links
+
+- [Getting Started](/getting-started) — Create your first API key and make your first request
+- [Authentication](/authentication) — How API key authentication works
+- [Dashboard Overview](/product/overview) — Learn the TalkPilot Dashboard
+
+## API overview
+
+| Resource | Capabilities |
+|----------|-------------|
+| [**Agents**](/api/agents) | List, read, and update AI agent configurations |
+| [**Tools**](/api/tools) | Create, update, and delete agent tools (HTTP requests, call transfers, etc.) |
+| [**Employees**](/api/employees) | Manage employee records and availability status |
+| [**Forwarding Slots**](/api/forwarding-slots) | Configure call routing rules with priority-based forwarding |
+| [**Knowledge Base**](/api/knowledge-base) | Add, update, and remove knowledge base documents |
+| [**Calls**](/api/calls) | Read call records, transcripts, and audio URLs |
+| [**Organization**](/api/organization) | Read and update organization-level settings |
+
+## Base URL
+
+```
+https://{project_ref}.supabase.co/functions/v1/api/v1
+```
+
+Replace `{project_ref}` with your Supabase project reference.
+
+## Key features
+
+- **API Key Authentication** — Scoped keys with granular permissions per resource
+- **Rate Limiting** — 60 req/min and 1,000 req/hour per key (customizable)
+- **Pagination** — All list endpoints support page-based pagination
+- **Consistent Error Format** — Structured error responses with request IDs for debugging
+- **Agent Scoping** — API keys can be restricted to specific agents
+
+## Need help?
+
+Contact us at [support@talkpilot.io](mailto:support@talkpilot.io) or visit the TalkPilot Dashboard under **Settings > API** to manage your keys.

@@ -1,0 +1,2553 @@
+openapi: 3.1.0
+info:
+  title: TalkPilot API
+  version: 1.0.0
+  description: |
+    The TalkPilot API allows you to programmatically manage your call center agents,
+    employees, forwarding slots, knowledge base, and more.
+
+    ## Authentication
+
+    All API requests require an API key passed via the `X-API-Key` header:
+
+    ```
+    X-API-Key: tp_live_abc123def456...
+    ```
+
+    API keys are scoped to a single organization and can be restricted to specific
+    agents and permissions. Create and manage keys in the TalkPilot Dashboard
+    under **Settings > API**.
+
+    ## Rate Limiting
+
+    Default limits per API key:
+    - **60 requests/minute**
+    - **1,000 requests/hour**
+
+    Rate limit headers are included in every response:
+    - `X-RateLimit-Limit` — Max requests per minute
+    - `X-RateLimit-Remaining` — Remaining requests in current window
+    - `X-RateLimit-Reset` — Unix timestamp when the window resets
+
+    When rate limited, the API returns `429 Too Many Requests` with a `Retry-After` header.
+
+    ## Pagination
+
+    List endpoints support pagination via query parameters:
+    - `page` — Page number (default: 1)
+    - `limit` — Items per page (default: 20, max: 100)
+
+    Paginated responses include a `pagination` object with `page`, `limit`, `total`, and `pages`.
+
+    ## Error Format
+
+    All errors follow a consistent format:
+
+    ```json
+    {
+      "error": {
+        "code": "VALIDATION_ERROR",
+        "message": "Human-readable description",
+        "details": [{ "field": "name", "message": "Required" }],
+        "request_id": "req_abc123"
+      }
+    }
+    ```
+
+  contact:
+    name: TalkPilot Support
+    email: support@talkpilot.io
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://{project_ref}.supabase.co/functions/v1/api
+    description: Production
+    variables:
+      project_ref:
+        default: your-project-ref
+        description: Your Supabase project reference
+
+tags:
+  - name: Health
+    description: API health and status
+  - name: Agents
+    description: Manage AI agent configurations
+  - name: Tools
+    description: Manage agent tools (HTTP requests, call transfers, etc.)
+  - name: Employees
+    description: Manage employees linked to agents
+  - name: Forwarding Slots
+    description: Manage call forwarding slot assignments
+  - name: Knowledge Base
+    description: Manage agent knowledge base documents
+  - name: Calls
+    description: Read call records and transcripts
+  - name: Organization
+    description: Organization-level settings
+  - name: API Keys
+    description: Manage API keys (Dashboard JWT auth only)
+
+security:
+  - apiKey: []
+
+paths:
+  # ──────────────────────────────────────────
+  # Health
+  # ──────────────────────────────────────────
+  /v1/health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: Health check
+      description: Returns API status. No authentication required.
+      security: []
+      responses:
+        "200":
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  # ──────────────────────────────────────────
+  # Agents
+  # ──────────────────────────────────────────
+  /v1/agents:
+    get:
+      operationId: listAgents
+      tags: [Agents]
+      summary: List agents
+      description: |
+        Returns all agents accessible to the API key. If the key has
+        `allowed_agent_ids` set, only those agents are returned.
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Agent"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+              example:
+                data:
+                  - id: "550e8400-e29b-41d4-a716-446655440000"
+                    name: "Rezeption Bot"
+                    phone_number: "+4930123456"
+                    is_active: true
+                    language: "de"
+                    llm_provider: "openai"
+                    llm_model: "gpt-4o"
+                    voice_id: "sarah"
+                    created_at: "2025-06-01T10:00:00Z"
+                pagination:
+                  page: 1
+                  limit: 20
+                  total: 3
+                  pages: 1
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/agents/{agentId}:
+    get:
+      operationId: getAgent
+      tags: [Agents]
+      summary: Get agent details
+      description: Returns the full configuration of a single agent.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      responses:
+        "200":
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                name: "Rezeption Bot"
+                phone_number: "+4930123456"
+                is_active: true
+                language: "de"
+                formality: "formal"
+                llm_provider: "openai"
+                llm_model: "gpt-4o"
+                llm_temperature: 0.7
+                tts_provider: "openai"
+                voice_id: "sarah"
+                realtime_voice: null
+                speaking_rate: 1.0
+                stt_provider: "deepgram"
+                prompt: "Du bist ein freundlicher Rezeptionsbot..."
+                greeting: "Guten Tag, wie kann ich Ihnen helfen?"
+                post_call_webhook_url: "https://example.com/webhook"
+                schedule:
+                  timezone: "Europe/Berlin"
+                  rules:
+                    - days: [1, 2, 3, 4, 5]
+                      start_time: "08:00"
+                      end_time: "18:00"
+                backup_agent_id: null
+                vacation_mode: false
+                vacation_end: null
+                vacation_notdienst: false
+                allow_greeting_interruption: true
+                short_calls_auto_edit: false
+                track_caller_name: true
+                transfer_timeout_seconds: 30
+                created_at: "2025-06-01T10:00:00Z"
+                updated_at: "2025-06-15T14:30:00Z"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      operationId: updateAgent
+      tags: [Agents]
+      summary: Update agent settings
+      description: |
+        Partially update an agent's configuration. Only include the fields
+        you want to change. Omitted fields remain unchanged.
+
+        **Note:** `phone_number`, `organization_id`, and `created_by` cannot be
+        changed via the API.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentUpdate"
+            examples:
+              changePrompt:
+                summary: Update system prompt
+                value:
+                  prompt: "Du bist ein professioneller Kundenservice-Agent..."
+                  greeting: "Willkommen bei Firma X, wie kann ich helfen?"
+              toggleActive:
+                summary: Activate/deactivate agent
+                value:
+                  is_active: false
+              updateSchedule:
+                summary: Set business hours
+                value:
+                  schedule:
+                    timezone: "Europe/Berlin"
+                    rules:
+                      - days: [1, 2, 3, 4, 5]
+                        start_time: "09:00"
+                        end_time: "17:00"
+              enableVacation:
+                summary: Enable vacation mode
+                value:
+                  vacation_mode: true
+                  vacation_end: "2026-04-01T00:00:00Z"
+                  vacation_notdienst: true
+      responses:
+        "200":
+          description: Updated agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/agents/{agentId}/status:
+    get:
+      operationId: getAgentStatus
+      tags: [Agents]
+      summary: Get agent status
+      description: |
+        Lightweight endpoint returning only the agent's active status,
+        schedule, and vacation state. Useful for monitoring dashboards.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      responses:
+        "200":
+          description: Agent status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  is_active:
+                    type: boolean
+                  vacation_mode:
+                    type: boolean
+                  vacation_end:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  vacation_notdienst:
+                    type: boolean
+                  schedule:
+                    $ref: "#/components/schemas/AgentSchedule"
+                  is_within_schedule:
+                    type: boolean
+                    description: Whether the agent is currently within scheduled hours
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                name: "Rezeption Bot"
+                is_active: true
+                vacation_mode: false
+                vacation_end: null
+                vacation_notdienst: false
+                schedule:
+                  timezone: "Europe/Berlin"
+                  rules:
+                    - days: [1, 2, 3, 4, 5]
+                      start_time: "08:00"
+                      end_time: "18:00"
+                is_within_schedule: true
+
+  # ──────────────────────────────────────────
+  # Agent Tools
+  # ──────────────────────────────────────────
+  /v1/agents/{agentId}/tools:
+    get:
+      operationId: listTools
+      tags: [Tools]
+      summary: List agent tools
+      description: Returns all tools configured for the specified agent.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      responses:
+        "200":
+          description: List of tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentTool"
+              example:
+                data:
+                  - id: "tool-uuid-1"
+                    agent_id: "550e8400-e29b-41d4-a716-446655440000"
+                    name: "lookup_customer"
+                    display_name: "Kunden-Lookup"
+                    description: "Looks up customer information by phone number"
+                    tool_type: "http_request"
+                    is_enabled: true
+                    priority: 1
+                    config:
+                      url: "https://crm.example.com/api/customers"
+                      method: "GET"
+                      headers:
+                        - key: "Authorization"
+                          value: "Bearer {{API_KEY}}"
+
+    post:
+      operationId: createTool
+      tags: [Tools]
+      summary: Create a tool
+      description: |
+        Add a new tool to an agent. The `tool_type` determines which fields
+        are required in the `config` object.
+
+        **Tool types and their config:**
+
+        - **`http_request`** — Make HTTP requests to external APIs
+          ```json
+          { "url": "https://...", "method": "GET", "headers": [{"key":"...", "value":"..."}], "query_params": [{"key":"...", "value":"..."}], "timeout": 30, "speak_during_execution": true, "speak_after_execution": true }
+          ```
+        - **`transfer_call`** — Cold/warm call transfer
+          ```json
+          { "phone_number": "+49...", "transfer_mode": "cold", "play_hold_music": false }
+          ```
+        - **`monitored_transfer`** — SIP INVITE transfer with monitoring
+          ```json
+          { "phone_number": "+49...", "timeout_seconds": 20 }
+          ```
+        - **`end_call`** — End the call
+          ```json
+          { "goodbye_message": "Auf Wiedersehen!" }
+          ```
+        - **`extract_variable`** — Extract structured data from conversation
+          ```json
+          { "variable_name": "email", "variable_type": "email", "prompt_text": "...", "example_format": "user@example.com", "confirmation_enabled": true }
+          ```
+        - **`play_tone`** — Play DTMF tones
+          ```json
+          { "tone_type": "dtmf", "dtmf_digit": "1", "duration": 500, "volume": 0.8 }
+          ```
+        - **`knowledge_base`** — Search agent knowledge base
+          ```json
+          { "top_k": 5, "similarity_threshold": 0.7, "bridging_sentence": "Einen Moment..." }
+          ```
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentToolCreate"
+            examples:
+              httpRequest:
+                summary: HTTP Request tool
+                value:
+                  name: "lookup_customer"
+                  display_name: "Kunden-Lookup"
+                  description: "Looks up customer information by phone number"
+                  tool_type: "http_request"
+                  config:
+                    url: "https://crm.example.com/api/customers"
+                    method: "GET"
+                    headers:
+                      - key: "Authorization"
+                        value: "Bearer {{API_KEY}}"
+                    timeout: 30
+                    speak_during_execution: true
+                    speak_after_execution: true
+                  priority: 1
+                  is_enabled: true
+              transferCall:
+                summary: Transfer Call tool
+                value:
+                  name: "transfer_to_support"
+                  description: "Transfers the call to human support"
+                  tool_type: "transfer_call"
+                  config:
+                    phone_number: "+4930999888"
+                    transfer_mode: "cold"
+                    play_hold_music: false
+              endCall:
+                summary: End Call tool
+                value:
+                  name: "end_conversation"
+                  description: "Ends the call politely"
+                  tool_type: "end_call"
+                  config:
+                    goodbye_message: "Vielen Dank fuer Ihren Anruf. Auf Wiederhoeren!"
+      responses:
+        "201":
+          description: Tool created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTool"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          description: Tool with this name already exists for this agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/agents/{agentId}/tools/{toolId}:
+    get:
+      operationId: getTool
+      tags: [Tools]
+      summary: Get a tool
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/ToolId"
+      responses:
+        "200":
+          description: Tool details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTool"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      operationId: updateTool
+      tags: [Tools]
+      summary: Update a tool
+      description: Partially update a tool's configuration. Only include changed fields.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/ToolId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentToolUpdate"
+            example:
+              is_enabled: false
+              config:
+                url: "https://new-crm.example.com/api/customers"
+                method: "POST"
+      responses:
+        "200":
+          description: Updated tool
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentTool"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteTool
+      tags: [Tools]
+      summary: Delete a tool
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/ToolId"
+      responses:
+        "204":
+          description: Tool deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────
+  # Employees
+  # ──────────────────────────────────────────
+  /v1/agents/{agentId}/employees:
+    get:
+      operationId: listEmployees
+      tags: [Employees]
+      summary: List employees
+      description: Returns all employees linked to the specified agent.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: status
+          in: query
+          description: Filter by employee status
+          schema:
+            $ref: "#/components/schemas/EmployeeStatus"
+        - name: active
+          in: query
+          description: Filter by active state
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of employees
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Employee"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+              example:
+                data:
+                  - id: "emp-uuid-1"
+                    name: "Max Mustermann"
+                    phone_number: "+491701234567"
+                    email: "max@example.com"
+                    status: "anwesend"
+                    active: true
+                    get_mail: true
+                    agent_id: "550e8400-e29b-41d4-a716-446655440000"
+                    created_at: "2025-06-01T10:00:00Z"
+                    updated_at: "2025-06-15T14:30:00Z"
+                pagination:
+                  page: 1
+                  limit: 20
+                  total: 5
+                  pages: 1
+
+    post:
+      operationId: createEmployee
+      tags: [Employees]
+      summary: Create an employee
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeCreate"
+            example:
+              name: "Max Mustermann"
+              phone_number: "+491701234567"
+              email: "max@example.com"
+              status: "anwesend"
+              active: true
+              get_mail: true
+      responses:
+        "201":
+          description: Employee created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /v1/agents/{agentId}/employees/{employeeId}:
+    get:
+      operationId: getEmployee
+      tags: [Employees]
+      summary: Get an employee
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/EmployeeId"
+      responses:
+        "200":
+          description: Employee details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      operationId: updateEmployee
+      tags: [Employees]
+      summary: Update an employee
+      description: |
+        Partially update an employee. Common use case: changing the status
+        (e.g., marking an employee as on vacation).
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/EmployeeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeUpdate"
+            examples:
+              changeStatus:
+                summary: Mark employee as on vacation
+                value:
+                  status: "urlaub"
+              updateContact:
+                summary: Update contact info
+                value:
+                  phone_number: "+491709876543"
+                  email: "max.new@example.com"
+              deactivate:
+                summary: Deactivate employee
+                value:
+                  active: false
+      responses:
+        "200":
+          description: Updated employee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteEmployee
+      tags: [Employees]
+      summary: Delete an employee
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/EmployeeId"
+      responses:
+        "204":
+          description: Employee deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────
+  # Forwarding Slots
+  # ──────────────────────────────────────────
+  /v1/agents/{agentId}/forwarding-slots:
+    get:
+      operationId: listForwardingSlots
+      tags: [Forwarding Slots]
+      summary: List forwarding slots
+      description: |
+        Returns all forwarding slots for the specified agent, ordered by slot number.
+        Forwarding slots define how calls are routed to employees based on case type.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      responses:
+        "200":
+          description: List of forwarding slots
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ForwardingSlot"
+              example:
+                data:
+                  - id: "slot-uuid-1"
+                    slotnummer: "01"
+                    cases: "Rechnungsfragen, Zahlungsprobleme"
+                    slot_belegung: "Max Mustermann"
+                    prioritaet_1: "+491701234567"
+                    prioritaet_2: "+491709876543"
+                    prioritaet_3: null
+                    agent_id: "550e8400-e29b-41d4-a716-446655440000"
+                  - id: "slot-uuid-2"
+                    slotnummer: "02"
+                    cases: "Technischer Support"
+                    slot_belegung: "Erika Musterfrau"
+                    prioritaet_1: "+491705555555"
+                    prioritaet_2: null
+                    prioritaet_3: null
+                    agent_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    post:
+      operationId: createForwardingSlot
+      tags: [Forwarding Slots]
+      summary: Create a forwarding slot
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForwardingSlotCreate"
+            example:
+              slotnummer: "03"
+              cases: "Vertragsfragen"
+              slot_belegung: "Anna Schmidt"
+              prioritaet_1: "+491701111111"
+              prioritaet_2: "+491702222222"
+      responses:
+        "201":
+          description: Forwarding slot created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForwardingSlot"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+    put:
+      operationId: replaceAllForwardingSlots
+      tags: [Forwarding Slots]
+      summary: Replace all forwarding slots
+      description: |
+        Replaces all forwarding slots for an agent in a single operation.
+        Existing slots are deleted and replaced with the provided list.
+        Useful for bulk synchronization from external systems.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slots]
+              properties:
+                slots:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/ForwardingSlotCreate"
+            example:
+              slots:
+                - slotnummer: "01"
+                  cases: "Rechnungsfragen"
+                  slot_belegung: "Max Mustermann"
+                  prioritaet_1: "+491701234567"
+                - slotnummer: "02"
+                  cases: "Technischer Support"
+                  slot_belegung: "Erika Musterfrau"
+                  prioritaet_1: "+491705555555"
+                  prioritaet_2: "+491706666666"
+      responses:
+        "200":
+          description: All slots replaced
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ForwardingSlot"
+                  replaced_count:
+                    type: integer
+                    description: Number of previous slots that were replaced
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /v1/agents/{agentId}/forwarding-slots/{slotId}:
+    patch:
+      operationId: updateForwardingSlot
+      tags: [Forwarding Slots]
+      summary: Update a forwarding slot
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/SlotId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForwardingSlotUpdate"
+            example:
+              cases: "Rechnungsfragen, Mahnungen"
+              prioritaet_2: "+491703333333"
+      responses:
+        "200":
+          description: Updated slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForwardingSlot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteForwardingSlot
+      tags: [Forwarding Slots]
+      summary: Delete a forwarding slot
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/SlotId"
+      responses:
+        "204":
+          description: Slot deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────
+  # Knowledge Base
+  # ──────────────────────────────────────────
+  /v1/agents/{agentId}/knowledge-base:
+    get:
+      operationId: listKbDocuments
+      tags: [Knowledge Base]
+      summary: List knowledge base documents
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: status
+          in: query
+          description: Filter by processing status
+          schema:
+            type: string
+            enum: [pending, processing, completed, error]
+      responses:
+        "200":
+          description: List of KB documents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KbDocument"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+              example:
+                data:
+                  - id: "kb-uuid-1"
+                    agent_id: "550e8400-e29b-41d4-a716-446655440000"
+                    title: "Preisliste 2026"
+                    content: "Unsere aktuellen Preise..."
+                    source_type: "manual"
+                    status: "completed"
+                    chunk_count: 3
+                    created_at: "2025-06-01T10:00:00Z"
+                pagination:
+                  page: 1
+                  limit: 20
+                  total: 2
+                  pages: 1
+
+    post:
+      operationId: createKbDocument
+      tags: [Knowledge Base]
+      summary: Create a knowledge base document
+      description: |
+        Create a new knowledge base document with text content.
+        The content will be automatically chunked and embedded for retrieval.
+
+        For file uploads (PDF, etc.), use the Dashboard UI.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KbDocumentCreate"
+            example:
+              title: "Oeffnungszeiten"
+              content: |
+                Unsere Oeffnungszeiten:
+                Montag - Freitag: 08:00 - 18:00 Uhr
+                Samstag: 09:00 - 14:00 Uhr
+                Sonntag: geschlossen
+      responses:
+        "201":
+          description: Document created (processing starts automatically)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KbDocument"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /v1/agents/{agentId}/knowledge-base/{documentId}:
+    get:
+      operationId: getKbDocument
+      tags: [Knowledge Base]
+      summary: Get a knowledge base document
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        "200":
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KbDocument"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      operationId: updateKbDocument
+      tags: [Knowledge Base]
+      summary: Update a knowledge base document
+      description: |
+        Update a document's title or content. If content changes,
+        the document will be re-chunked and re-embedded automatically.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/DocumentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KbDocumentUpdate"
+            example:
+              title: "Oeffnungszeiten (aktualisiert)"
+              content: "Neue Oeffnungszeiten ab Maerz 2026..."
+      responses:
+        "200":
+          description: Updated document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KbDocument"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteKbDocument
+      tags: [Knowledge Base]
+      summary: Delete a knowledge base document
+      description: Deletes the document and all associated chunks/embeddings.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        "204":
+          description: Document deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────
+  # Knowledge Base Chunks (Direct Access)
+  # ──────────────────────────────────────────
+  /v1/agents/{agentId}/knowledge-base/{documentId}/chunks:
+    get:
+      operationId: listKbChunks
+      tags: [Knowledge Base]
+      summary: List chunks for a document
+      description: Returns all chunks for a specific knowledge base document.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/DocumentId"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: List of chunks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KbChunk"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+              example:
+                data:
+                  - id: "chunk-uuid-1"
+                    document_id: "doc-uuid-1"
+                    agent_id: "550e8400-e29b-41d4-a716-446655440000"
+                    content: "Produkt A kostet 29,99 EUR pro Monat..."
+                    chunk_index: 0
+                    token_count: 150
+                    metadata: { "source": "pricing-system" }
+                    created_at: "2026-04-27T10:00:00Z"
+                pagination:
+                  page: 1
+                  limit: 20
+                  total: 5
+                  pages: 1
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      operationId: createKbChunks
+      tags: [Knowledge Base]
+      summary: Create chunks (batch)
+      description: |
+        Insert one or more pre-processed chunks for a document.
+        Use this when your external system handles its own text splitting and embedding generation.
+
+        The `embedding` field expects a 1536-dimensional vector compatible with
+        OpenAI's `text-embedding-3-small` model. Chunks without embeddings will not
+        appear in vector search results during calls.
+
+        Access is scoped to your organization — you can only write chunks for agents
+        that belong to an organization you are a member of.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/DocumentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KbChunkBatchCreate"
+            example:
+              chunks:
+                - content: "Produkt A kostet 29,99 EUR pro Monat..."
+                  embedding: [0.012, -0.034, 0.056]
+                  chunk_index: 0
+                  token_count: 150
+                  metadata: { "source": "pricing-system", "version": "2.1" }
+                - content: "Produkt B kostet 49,99 EUR pro Monat..."
+                  embedding: [0.023, -0.045, 0.067]
+                  chunk_index: 1
+                  token_count: 120
+                  metadata: { "source": "pricing-system", "version": "2.1" }
+      responses:
+        "201":
+          description: Chunks created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KbChunk"
+                  inserted_count:
+                    type: integer
+                    description: Number of chunks inserted
+              example:
+                data:
+                  - id: "chunk-uuid-1"
+                    document_id: "doc-uuid-1"
+                    agent_id: "550e8400-e29b-41d4-a716-446655440000"
+                    content: "Produkt A kostet 29,99 EUR..."
+                    chunk_index: 0
+                    token_count: 150
+                    metadata: { "source": "pricing-system" }
+                    created_at: "2026-04-27T10:00:00Z"
+                inserted_count: 2
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteKbChunks
+      tags: [Knowledge Base]
+      summary: Delete all chunks for a document
+      description: |
+        Removes all chunks for the given document. Useful before re-uploading
+        updated chunks from an external system.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        "204":
+          description: All chunks deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────
+  # Calls (Read-Only)
+  # ──────────────────────────────────────────
+  /v1/agents/{agentId}/calls:
+    get:
+      operationId: listCalls
+      tags: [Calls]
+      summary: List calls
+      description: |
+        Returns calls for the specified agent with optional filtering.
+        Results are ordered by `created_at` descending (newest first).
+        Soft-deleted calls are excluded by default.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: done
+          in: query
+          description: Filter by completion status
+          schema:
+            type: boolean
+        - name: from
+          in: query
+          description: Filter calls created after this date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Filter calls created before this date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: phone_number
+          in: query
+          description: Filter by caller phone number (exact match)
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Search in customer name, phone number, or call summary
+          schema:
+            type: string
+        - name: include_deleted
+          in: query
+          description: Include soft-deleted calls
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: List of calls
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Call"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+              example:
+                data:
+                  - id: "call-uuid-1"
+                    call_id: "lk_call_abc123"
+                    customer_name: "Hans Meier"
+                    customer_request: "Frage zu Rechnung #1234"
+                    phone_number: "+491701234567"
+                    duration: 180
+                    done: true
+                    general_success: true
+                    disconnection_reason: "user_hangup"
+                    call_summary: "Kunde fragte nach Rechnung..."
+                    employee: "Max Mustermann"
+                    note: null
+                    agent_id: "550e8400-e29b-41d4-a716-446655440000"
+                    created_at: "2026-03-19T10:30:00Z"
+                pagination:
+                  page: 1
+                  limit: 20
+                  total: 150
+                  pages: 8
+
+  /v1/agents/{agentId}/calls/{callId}:
+    get:
+      operationId: getCall
+      tags: [Calls]
+      summary: Get call details
+      description: |
+        Returns full call details including transcript and audio URL.
+        Purged calls will have `transcript`, `audio_file_url`, and
+        `phone_number` set to null.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/CallId"
+      responses:
+        "200":
+          description: Call details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallDetail"
+              example:
+                id: "call-uuid-1"
+                call_id: "lk_call_abc123"
+                customer_name: "Hans Meier"
+                customer_request: "Frage zu Rechnung #1234"
+                phone_number: "+491701234567"
+                duration: 180
+                done: true
+                general_success: true
+                final_score: 8
+                disconnection_reason: "user_hangup"
+                call_summary: "Kunde fragte nach Rechnung #1234. Agent konnte Frage beantworten."
+                transcript: "[{\"role\":\"agent\",\"text\":\"Guten Tag...\"}]"
+                audio_file_url: "https://storage.example.com/calls/abc123.wav"
+                employee: "Max Mustermann"
+                note: "Rueckruf vereinbart fuer Donnerstag"
+                is_purged: false
+                deleted_at: null
+                agent_id: "550e8400-e29b-41d4-a716-446655440000"
+                created_at: "2026-03-19T10:30:00Z"
+                updated_at: "2026-03-19T10:35:00Z"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ──────────────────────────────────────────
+  # Organization
+  # ──────────────────────────────────────────
+  /v1/organization:
+    get:
+      operationId: getOrganization
+      tags: [Organization]
+      summary: Get organization settings
+      description: Returns the organization associated with the API key.
+      responses:
+        "200":
+          description: Organization settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+              example:
+                id: "org-uuid-1"
+                name: "Mustermann GmbH"
+                auto_delete_done_calls: false
+                created_at: "2025-01-01T00:00:00Z"
+
+    patch:
+      operationId: updateOrganization
+      tags: [Organization]
+      summary: Update organization settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationUpdate"
+            example:
+              auto_delete_done_calls: true
+      responses:
+        "200":
+          description: Updated organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  # ──────────────────────────────────────────
+  # API Keys (Dashboard JWT auth only)
+  # ──────────────────────────────────────────
+  /v1/api-keys:
+    get:
+      operationId: listApiKeys
+      tags: [API Keys]
+      summary: List API keys
+      description: |
+        Lists all API keys for the current user's organization.
+        **Requires Supabase JWT authentication** (not API key auth).
+        The actual key values are never returned — only the prefix for identification.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiKeyInfo"
+              example:
+                data:
+                  - id: "key-uuid-1"
+                    name: "n8n Production"
+                    key_prefix: "tp_live_"
+                    permissions:
+                      - "agents:read"
+                      - "agents:write"
+                      - "employees:read"
+                      - "employees:write"
+                    allowed_agent_ids: null
+                    rate_limit_per_minute: 60
+                    rate_limit_per_hour: 1000
+                    is_active: true
+                    last_used_at: "2026-03-19T09:15:00Z"
+                    expires_at: null
+                    created_at: "2026-01-15T10:00:00Z"
+
+    post:
+      operationId: createApiKey
+      tags: [API Keys]
+      summary: Create an API key
+      description: |
+        Creates a new API key. **The raw key is returned only once in the response.**
+        Store it securely — it cannot be retrieved again.
+
+        **Requires Supabase JWT authentication** (not API key auth).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiKeyCreate"
+            example:
+              name: "n8n Production"
+              permissions:
+                - "agents:read"
+                - "agents:write"
+                - "employees:read"
+                - "employees:write"
+                - "tools:read"
+                - "tools:write"
+              rate_limit_per_minute: 60
+              expires_at: null
+      responses:
+        "201":
+          description: API key created (raw key shown only once)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key:
+                    type: string
+                    description: The raw API key — store this securely, it will not be shown again
+                    example: "tp_live_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  permissions:
+                    type: array
+                    items:
+                      type: string
+                  created_at:
+                    type: string
+                    format: date-time
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /v1/api-keys/{keyId}:
+    patch:
+      operationId: updateApiKey
+      tags: [API Keys]
+      summary: Update an API key
+      description: |
+        Update key metadata (name, permissions, rate limits, active status).
+        The key value itself cannot be changed — create a new key instead.
+
+        **Requires Supabase JWT authentication.**
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiKeyUpdate"
+            examples:
+              deactivate:
+                summary: Deactivate a key
+                value:
+                  is_active: false
+              changePermissions:
+                summary: Restrict to read-only
+                value:
+                  name: "n8n Read-Only"
+                  permissions:
+                    - "agents:read"
+                    - "employees:read"
+                    - "calls:read"
+      responses:
+        "200":
+          description: Updated API key info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyInfo"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteApiKey
+      tags: [API Keys]
+      summary: Revoke an API key
+      description: |
+        Permanently deletes an API key. Any requests using this key will
+        immediately receive `401 Unauthorized`.
+
+        **Requires Supabase JWT authentication.**
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Key revoked
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+# ════════════════════════════════════════════
+# Components
+# ════════════════════════════════════════════
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        API key for external access. Format: `tp_live_<32-hex-chars>`.
+        Create keys in the TalkPilot Dashboard under Settings > API.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase JWT token (for Dashboard-only endpoints like API key management)
+
+  parameters:
+    AgentId:
+      name: agentId
+      in: path
+      required: true
+      description: Agent UUID
+      schema:
+        type: string
+        format: uuid
+    ToolId:
+      name: toolId
+      in: path
+      required: true
+      description: Tool UUID
+      schema:
+        type: string
+        format: uuid
+    EmployeeId:
+      name: employeeId
+      in: path
+      required: true
+      description: Employee UUID
+      schema:
+        type: string
+        format: uuid
+    SlotId:
+      name: slotId
+      in: path
+      required: true
+      description: Forwarding slot UUID
+      schema:
+        type: string
+        format: uuid
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      description: Knowledge base document UUID
+      schema:
+        type: string
+        format: uuid
+    CallId:
+      name: callId
+      in: path
+      required: true
+      description: Call UUID
+      schema:
+        type: string
+        format: uuid
+    PageParam:
+      name: page
+      in: query
+      description: Page number
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    LimitParam:
+      name: limit
+      in: query
+      description: Items per page
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: "Invalid or missing API key"
+              request_id: "req_abc123"
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: FORBIDDEN
+              message: "API key lacks required permission: agents:write"
+              request_id: "req_abc123"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: NOT_FOUND
+              message: "Agent not found"
+              request_id: "req_abc123"
+    ValidationError:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: "Invalid request body"
+              details:
+                - field: "llm_temperature"
+                  message: "Must be between 0 and 2"
+              request_id: "req_abc123"
+
+  schemas:
+    # ── Error ──
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - INVALID_REQUEST
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - AGENT_NOT_ACCESSIBLE
+                - NOT_FOUND
+                - CONFLICT
+                - UNPROCESSABLE_ENTITY
+                - RATE_LIMITED
+                - INTERNAL_ERROR
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+            request_id:
+              type: string
+
+    # ── Pagination ──
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        pages:
+          type: integer
+
+    # ── Agent ──
+    Agent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone_number:
+          type: string
+        is_active:
+          type: boolean
+        language:
+          type: string
+          nullable: true
+          description: "Language code: de, en, fr, es"
+        formality:
+          type: string
+          nullable: true
+          enum: [formal, informal]
+          description: "formal = Sie, informal = Du"
+        llm_provider:
+          type: string
+          nullable: true
+          enum: [azure, openai, gemini, gemini_live, gemini_live_cascade, openai_realtime, openai_realtime_cascade, groq]
+        llm_model:
+          type: string
+          nullable: true
+          description: "Model identifier, e.g. gpt-4.1, gemini-2.5-flash, meta-llama/llama-4-scout-17b-16e-instruct, llama-3.3-70b-versatile, llama-3.1-8b-instant"
+        llm_temperature:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 2
+        tts_provider:
+          type: string
+          nullable: true
+          enum: [cartesia, elevenlabs, gemini_live, openai_realtime]
+        voice_id:
+          type: string
+          nullable: true
+          description: "Voice identifier for TTS"
+        realtime_voice:
+          type: string
+          nullable: true
+          description: "Voice for native realtime providers (OpenAI/Gemini)"
+        speaking_rate:
+          type: number
+          nullable: true
+          minimum: 0.5
+          maximum: 2.0
+        stt_provider:
+          type: string
+          nullable: true
+          enum: [deepgram, elevenlabs, mistral, groq]
+          description: "Speech-to-text provider (null for native realtime)"
+        prompt:
+          type: string
+          description: "System prompt for the agent"
+          maxLength: 50000
+        greeting:
+          type: string
+          nullable: true
+          description: "Initial greeting message when call starts"
+          maxLength: 2000
+        post_call_webhook_url:
+          type: string
+          format: uri
+          nullable: true
+          description: "Webhook URL called after each call completes"
+        schedule:
+          $ref: "#/components/schemas/AgentSchedule"
+        backup_agent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Fallback agent when outside schedule or in vacation mode"
+        vacation_mode:
+          type: boolean
+          description: "Whether vacation mode is enabled"
+        vacation_end:
+          type: string
+          format: date-time
+          nullable: true
+          description: "When vacation mode should automatically end"
+        vacation_notdienst:
+          type: boolean
+          description: "Whether emergency service is active during vacation"
+        allow_greeting_interruption:
+          type: boolean
+          nullable: true
+          description: "Allow callers to interrupt the greeting"
+        short_calls_auto_edit:
+          type: boolean
+          description: "Automatically mark very short calls as done"
+        track_caller_name:
+          type: boolean
+          description: "Ask for and track the caller's name"
+        transfer_timeout_seconds:
+          type: number
+          nullable: true
+          minimum: 10
+          maximum: 120
+          description: "Timeout in seconds for call transfers"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AgentUpdate:
+      type: object
+      description: Partial agent update. Only include fields you want to change.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        is_active:
+          type: boolean
+        language:
+          type: string
+          nullable: true
+        formality:
+          type: string
+          nullable: true
+          enum: [formal, informal]
+        llm_provider:
+          type: string
+          nullable: true
+        llm_model:
+          type: string
+          nullable: true
+        llm_temperature:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 2
+        tts_provider:
+          type: string
+          nullable: true
+        voice_id:
+          type: string
+          nullable: true
+        realtime_voice:
+          type: string
+          nullable: true
+        speaking_rate:
+          type: number
+          nullable: true
+          minimum: 0.5
+          maximum: 2.0
+        stt_provider:
+          type: string
+          nullable: true
+        prompt:
+          type: string
+          maxLength: 50000
+        greeting:
+          type: string
+          nullable: true
+          maxLength: 2000
+        post_call_webhook_url:
+          type: string
+          format: uri
+          nullable: true
+        schedule:
+          $ref: "#/components/schemas/AgentSchedule"
+        backup_agent_id:
+          type: string
+          format: uuid
+          nullable: true
+        vacation_mode:
+          type: boolean
+        vacation_end:
+          type: string
+          format: date-time
+          nullable: true
+        vacation_notdienst:
+          type: boolean
+        allow_greeting_interruption:
+          type: boolean
+          nullable: true
+        short_calls_auto_edit:
+          type: boolean
+        track_caller_name:
+          type: boolean
+        transfer_timeout_seconds:
+          type: number
+          nullable: true
+          minimum: 10
+          maximum: 120
+
+    AgentSchedule:
+      type: object
+      nullable: true
+      description: |
+        Agent business hours. When set, the agent only accepts calls during
+        the specified time windows. Outside hours, calls go to the backup agent.
+      properties:
+        timezone:
+          type: string
+          description: "IANA timezone identifier"
+          example: "Europe/Berlin"
+        rules:
+          type: array
+          items:
+            type: object
+            required: [days, start_time, end_time]
+            properties:
+              days:
+                type: array
+                items:
+                  type: integer
+                  minimum: 0
+                  maximum: 6
+                description: "Days of week (0=Sunday, 1=Monday, ..., 6=Saturday)"
+                example: [1, 2, 3, 4, 5]
+              start_time:
+                type: string
+                pattern: "^\\d{2}:\\d{2}$"
+                description: "Start time in HH:mm"
+                example: "08:00"
+              end_time:
+                type: string
+                pattern: "^\\d{2}:\\d{2}$"
+                description: "End time in HH:mm"
+                example: "18:00"
+
+    # ── Tool ──
+    AgentTool:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agent_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: "Internal tool name (used in LLM function calling)"
+        display_name:
+          type: string
+          nullable: true
+          description: "Human-readable display name"
+        description:
+          type: string
+          description: "Tool description (shown to the LLM to decide when to use it)"
+        tool_type:
+          $ref: "#/components/schemas/ToolType"
+        config:
+          type: object
+          description: "Tool-specific configuration (schema depends on tool_type)"
+        is_enabled:
+          type: boolean
+          nullable: true
+        priority:
+          type: integer
+          nullable: true
+          description: "Execution priority (lower number = higher priority)"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AgentToolCreate:
+      type: object
+      required: [name, description, tool_type, config]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: "Internal tool name (lowercase, underscores)"
+        display_name:
+          type: string
+          nullable: true
+          maxLength: 255
+        description:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        tool_type:
+          $ref: "#/components/schemas/ToolType"
+        config:
+          type: object
+        is_enabled:
+          type: boolean
+          default: true
+        priority:
+          type: integer
+          nullable: true
+
+    AgentToolUpdate:
+      type: object
+      description: Partial tool update. Only include fields to change.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        display_name:
+          type: string
+          nullable: true
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 2000
+        config:
+          type: object
+        is_enabled:
+          type: boolean
+        priority:
+          type: integer
+          nullable: true
+
+    ToolType:
+      type: string
+      enum:
+        - http_request
+        - transfer_call
+        - monitored_transfer
+        - end_call
+        - extract_variable
+        - play_tone
+        - knowledge_base
+      description: |
+        Available tool types:
+        - `http_request` — Make HTTP requests to external APIs
+        - `transfer_call` — Blind or warm call transfer
+        - `monitored_transfer` — SIP INVITE transfer with monitoring
+        - `end_call` — End the call with optional goodbye message
+        - `extract_variable` — Extract structured data (email, phone, etc.)
+        - `play_tone` — Play DTMF tones
+        - `knowledge_base` — Search the agent's knowledge base
+
+    # ── Employee ──
+    Employee:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone_number:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+        active:
+          type: boolean
+        get_mail:
+          type: boolean
+          description: "Whether the employee receives email notifications"
+        agent_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    EmployeeCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        phone_number:
+          type: string
+          nullable: true
+          maxLength: 30
+        email:
+          type: string
+          format: email
+          nullable: true
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+        active:
+          type: boolean
+          default: true
+        get_mail:
+          type: boolean
+          default: false
+
+    EmployeeUpdate:
+      type: object
+      description: Partial employee update.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        phone_number:
+          type: string
+          nullable: true
+          maxLength: 30
+        email:
+          type: string
+          format: email
+          nullable: true
+        status:
+          $ref: "#/components/schemas/EmployeeStatus"
+        active:
+          type: boolean
+        get_mail:
+          type: boolean
+
+    EmployeeStatus:
+      type: string
+      enum:
+        - anwesend
+        - urlaub
+        - krank
+        - weiterbildung
+        - notdienst
+      description: |
+        Employee availability status:
+        - `anwesend` — Present / available
+        - `urlaub` — On vacation
+        - `krank` — Sick leave
+        - `weiterbildung` — In training
+        - `notdienst` — Emergency duty
+
+    # ── Forwarding Slot ──
+    ForwardingSlot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slotnummer:
+          type: string
+          description: "Slot number with leading zero, e.g. '01', '02'"
+          example: "01"
+        cases:
+          type: string
+          description: "Comma-separated case types this slot handles"
+          example: "Rechnungsfragen, Zahlungsprobleme"
+        slot_belegung:
+          type: string
+          nullable: true
+          description: "Name of the person assigned to this slot"
+        prioritaet_1:
+          type: string
+          nullable: true
+          description: "Primary contact (name or phone number)"
+        prioritaet_2:
+          type: string
+          nullable: true
+          description: "Secondary contact (fallback)"
+        prioritaet_3:
+          type: string
+          nullable: true
+          description: "Tertiary contact (fallback)"
+        agent_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    ForwardingSlotCreate:
+      type: object
+      required: [slotnummer, cases]
+      properties:
+        slotnummer:
+          type: string
+          pattern: "^\\d{2}$"
+          description: "Two-digit slot number, e.g. '01'"
+        cases:
+          type: string
+          minLength: 1
+        slot_belegung:
+          type: string
+          nullable: true
+        prioritaet_1:
+          type: string
+          nullable: true
+        prioritaet_2:
+          type: string
+          nullable: true
+        prioritaet_3:
+          type: string
+          nullable: true
+
+    ForwardingSlotUpdate:
+      type: object
+      description: Partial slot update.
+      properties:
+        cases:
+          type: string
+        slot_belegung:
+          type: string
+          nullable: true
+        prioritaet_1:
+          type: string
+          nullable: true
+        prioritaet_2:
+          type: string
+          nullable: true
+        prioritaet_3:
+          type: string
+          nullable: true
+
+    # ── Knowledge Base ──
+    KbDocument:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agent_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        content:
+          type: string
+          nullable: true
+          description: "Document text content (null for file-based documents)"
+        source_type:
+          type: string
+          nullable: true
+          enum: [manual, pdf, csv, txt, docx]
+        source_url:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, processing, completed, error]
+          description: "Processing status"
+        chunk_count:
+          type: integer
+          nullable: true
+          description: "Number of chunks created for embedding"
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    KbDocumentCreate:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+        content:
+          type: string
+          minLength: 1
+          maxLength: 100000
+          description: "Text content of the document"
+
+    KbDocumentUpdate:
+      type: object
+      description: Partial document update.
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+        content:
+          type: string
+          minLength: 1
+          maxLength: 100000
+
+    # ── KB Chunk ──
+    KbChunk:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        agent_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+          description: "Chunk text content"
+        embedding:
+          type: array
+          items:
+            type: number
+          nullable: true
+          description: "1536-dimensional vector (text-embedding-3-small compatible)"
+        chunk_index:
+          type: integer
+          description: "Position within the document (0-based)"
+        token_count:
+          type: integer
+          nullable: true
+          description: "Estimated token count"
+        metadata:
+          type: object
+          nullable: true
+          description: "Custom metadata (default: {})"
+        created_at:
+          type: string
+          format: date-time
+
+    KbChunkCreate:
+      type: object
+      required: [content, chunk_index]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          description: "Chunk text content"
+        embedding:
+          type: array
+          items:
+            type: number
+          description: "1536-dimensional embedding vector"
+        chunk_index:
+          type: integer
+          minimum: 0
+          description: "Position within the document (0-based)"
+        token_count:
+          type: integer
+          minimum: 0
+          description: "Estimated token count"
+        metadata:
+          type: object
+          description: "Custom metadata"
+
+    KbChunkBatchCreate:
+      type: object
+      required: [chunks]
+      properties:
+        chunks:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/KbChunkCreate"
+          description: "Array of chunks to insert (max 100 per request)"
+
+    # ── Call ──
+    Call:
+      type: object
+      description: "Call summary (list view — no transcript or audio)"
+      properties:
+        id:
+          type: string
+          format: uuid
+        call_id:
+          type: string
+          nullable: true
+          description: "External call ID (e.g. LiveKit)"
+        customer_name:
+          type: string
+          nullable: true
+        customer_request:
+          type: string
+          nullable: true
+        phone_number:
+          type: string
+          nullable: true
+        duration:
+          type: integer
+          nullable: true
+          description: "Call duration in seconds"
+        done:
+          type: boolean
+          nullable: true
+        general_success:
+          type: boolean
+          nullable: true
+        disconnection_reason:
+          type: string
+          nullable: true
+          enum: [user_hangup, call_transfer, agent_hangup]
+        call_summary:
+          type: string
+          nullable: true
+        employee:
+          type: string
+          nullable: true
+          description: "Assigned employee name"
+        note:
+          type: string
+          nullable: true
+        agent_id:
+          type: string
+          format: uuid
+          nullable: true
+        is_purged:
+          type: boolean
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CallDetail:
+      description: "Full call details including transcript and audio URL"
+      allOf:
+        - $ref: "#/components/schemas/Call"
+        - type: object
+          properties:
+            transcript:
+              type: string
+              nullable: true
+              description: "JSON string of conversation messages"
+            audio_file_url:
+              type: string
+              format: uri
+              nullable: true
+              description: "Signed URL to the call recording (expires after 1 hour)"
+            final_score:
+              type: integer
+              nullable: true
+              minimum: 1
+              maximum: 10
+              description: "AI-generated quality score (1-10)"
+
+    # ── Organization ──
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        auto_delete_done_calls:
+          type: boolean
+          nullable: true
+          description: "Automatically move completed calls to trash"
+        created_at:
+          type: string
+          format: date-time
+
+    OrganizationUpdate:
+      type: object
+      properties:
+        auto_delete_done_calls:
+          type: boolean
+
+    # ── API Key ──
+    ApiKeyInfo:
+      type: object
+      description: "API key metadata (the actual key value is never returned after creation)"
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        key_prefix:
+          type: string
+          description: "First 8 characters of the key for identification"
+          example: "tp_live_"
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Permission"
+        allowed_agent_ids:
+          type: array
+          nullable: true
+          items:
+            type: string
+            format: uuid
+          description: "Restrict key to specific agents (null = all agents in organization)"
+        rate_limit_per_minute:
+          type: integer
+        rate_limit_per_hour:
+          type: integer
+        is_active:
+          type: boolean
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ApiKeyCreate:
+      type: object
+      required: [name, permissions]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        permissions:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/Permission"
+        allowed_agent_ids:
+          type: array
+          nullable: true
+          items:
+            type: string
+            format: uuid
+        rate_limit_per_minute:
+          type: integer
+          minimum: 1
+          maximum: 600
+          default: 60
+        rate_limit_per_hour:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          default: 1000
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Optional expiration date (null = never expires)"
+
+    ApiKeyUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Permission"
+        allowed_agent_ids:
+          type: array
+          nullable: true
+          items:
+            type: string
+            format: uuid
+        rate_limit_per_minute:
+          type: integer
+          minimum: 1
+          maximum: 600
+        rate_limit_per_hour:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        is_active:
+          type: boolean
+
+    Permission:
+      type: string
+      enum:
+        - agents:read
+        - agents:write
+        - employees:read
+        - employees:write
+        - tools:read
+        - tools:write
+        - forwarding:read
+        - forwarding:write
+        - kb:read
+        - kb:write
+        - calls:read
+        - organization:read
+        - organization:write
+      description: |
+        Available permissions:
+        - `agents:read` — List and view agent configurations
+        - `agents:write` — Update agent settings
+        - `employees:read` — List and view employees
+        - `employees:write` — Create, update, delete employees
+        - `tools:read` — List and view agent tools
+        - `tools:write` — Create, update, delete tools
+        - `forwarding:read` — List forwarding slots
+        - `forwarding:write` — Create, update, delete forwarding slots
+        - `kb:read` — List and view knowledge base documents
+        - `kb:write` — Create, update, delete KB documents
+        - `calls:read` — List and view call records
+        - `organization:read` — View organization settings
+        - `organization:write` — Update organization settings

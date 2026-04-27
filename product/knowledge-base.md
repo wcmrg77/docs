@@ -71,6 +71,26 @@ You can configure the tool's behavior:
 
 **Via API:** You can create and manage text documents programmatically. File uploads are Dashboard-only. See [Knowledge Base API](/api/knowledge-base).
 
+## External integration (Direct Chunk API)
+
+If you manage your own chunking and embedding pipeline (e.g., via n8n, LangChain, or a custom ETL), you can write pre-processed chunks directly to an agent's knowledge base — bypassing TalkPilot's automatic processing.
+
+This is useful for:
+- **CRM / ERP sync** — keep product data, pricing, or customer info always up-to-date
+- **Custom chunking** — control chunk size and overlap for your specific use case
+- **External embedding models** — use your own embeddings (must be `text-embedding-3-small` compatible, 1536 dimensions)
+
+Typical flow:
+
+```
+1. Create a document via API          → get document_id
+2. Generate chunks + embeddings       → in your system
+3. Upload chunks via Direct Chunk API → stored in KB
+4. Set document status to "completed" → agent can search
+```
+
+For full endpoint documentation, request/response examples, and the chunk data model, see the [Direct Chunk API reference](/api/knowledge-base#direct-chunk-api).
+
 ## Tips
 
 - Keep documents focused on one topic each — this improves search accuracy

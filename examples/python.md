@@ -16,7 +16,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get("TALKPILOT_BASE_URL", "https://{project_ref}.supabase.co/functions/v1/api/v1")
+BASE_URL = os.environ.get("TALKPILOT_BASE_URL", "https://api.talkpilot.io/v1")
 API_KEY = os.environ.get("TALKPILOT_API_KEY", "tp_live_YOUR_KEY_HERE")
 
 HEADERS = {

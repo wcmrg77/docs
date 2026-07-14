@@ -52,7 +52,7 @@ Periodically fetch new calls and employee data from TalkPilot.
 import requests
 from datetime import datetime, timedelta
 
-BASE_URL = "https://{project_ref}.supabase.co/functions/v1/api/v1"
+BASE_URL = "https://api.talkpilot.io/v1"
 API_KEY = "tp_live_YOUR_KEY"
 HEADERS = {"X-API-Key": API_KEY}
 

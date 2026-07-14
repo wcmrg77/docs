@@ -24,7 +24,7 @@ tp_live_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4
 Test your key with the health endpoint (no authentication required):
 
 ```bash
-curl https://{project_ref}.supabase.co/functions/v1/api/v1/health
+curl https://api.talkpilot.io/v1/health
 ```
 
 Response:
@@ -41,7 +41,7 @@ Now list your agents using your API key:
 
 ```bash
 curl -H "X-API-Key: tp_live_YOUR_KEY_HERE" \
-  https://{project_ref}.supabase.co/functions/v1/api/v1/agents
+  https://api.talkpilot.io/v1/agents
 ```
 
 Response:
@@ -137,14 +137,14 @@ curl -X PATCH \
   -H "X-API-Key: tp_live_YOUR_KEY_HERE" \
   -H "Content-Type: application/json" \
   -d '{"status": "urlaub"}' \
-  https://{project_ref}.supabase.co/functions/v1/api/v1/agents/{agentId}/employees/{employeeId}
+  https://api.talkpilot.io/v1/agents/{agentId}/employees/{employeeId}
 ```
 
 ### Get recent calls
 
 ```bash
 curl -H "X-API-Key: tp_live_YOUR_KEY_HERE" \
-  "https://{project_ref}.supabase.co/functions/v1/api/v1/agents/{agentId}/calls?limit=10&from=2026-03-01T00:00:00Z"
+  "https://api.talkpilot.io/v1/agents/{agentId}/calls?limit=10&from=2026-03-01T00:00:00Z"
 ```
 
 ### Enable vacation mode for an agent
@@ -154,7 +154,7 @@ curl -X PATCH \
   -H "X-API-Key: tp_live_YOUR_KEY_HERE" \
   -H "Content-Type: application/json" \
   -d '{"vacation_mode": true, "vacation_end": "2026-04-01T00:00:00Z", "vacation_notdienst": true}' \
-  https://{project_ref}.supabase.co/functions/v1/api/v1/agents/{agentId}
+  https://api.talkpilot.io/v1/agents/{agentId}
 ```
 
 ## Next steps

@@ -11,7 +11,7 @@ Include the key in the `X-API-Key` header:
 
 ```bash
 curl -H "X-API-Key: tp_live_YOUR_KEY_HERE" \
-  https://{project_ref}.supabase.co/functions/v1/api/v1/agents
+  https://api.talkpilot.io/v1/agents
 ```
 
 API keys always start with the prefix `tp_live_` followed by 32 hexadecimal characters.

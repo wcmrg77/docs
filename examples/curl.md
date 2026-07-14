@@ -6,7 +6,7 @@ description: "Ready-to-use cURL examples for every endpoint"
 All examples use environment variables for the base URL and API key. Set them once:
 
 ```bash
-export TP_BASE="https://{project_ref}.supabase.co/functions/v1/api/v1"
+export TP_BASE="https://api.talkpilot.io/v1"
 export TP_KEY="tp_live_YOUR_KEY_HERE"
 ```
 

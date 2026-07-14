@@ -41,14 +41,14 @@ Every paginated response includes a `pagination` object:
 
 ```bash
 curl -H "X-API-Key: tp_live_YOUR_KEY" \
-  "https://{project_ref}.supabase.co/functions/v1/api/v1/agents/{agentId}/calls"
+  "https://api.talkpilot.io/v1/agents/{agentId}/calls"
 ```
 
 ### Specific page with custom limit
 
 ```bash
 curl -H "X-API-Key: tp_live_YOUR_KEY" \
-  "https://{project_ref}.supabase.co/functions/v1/api/v1/agents/{agentId}/calls?page=3&limit=50"
+  "https://api.talkpilot.io/v1/agents/{agentId}/calls?page=3&limit=50"
 ```
 
 ### Fetch all pages

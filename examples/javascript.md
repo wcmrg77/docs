@@ -8,7 +8,7 @@ A lightweight wrapper around `fetch` for the TalkPilot API — no external depen
 ## Setup
 
 ```typescript
-const BASE_URL = "https://{project_ref}.supabase.co/functions/v1/api/v1";
+const BASE_URL = "https://api.talkpilot.io/v1";
 const API_KEY = "tp_live_YOUR_KEY_HERE";
 
 async function talkpilot(

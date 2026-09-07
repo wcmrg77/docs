@@ -11,6 +11,10 @@ The Settings page (`/settings`) contains account, organization, and system confi
 - **Created date** — When the organization was created
 - **Your role** — Your role within this organization
 - **Invite users** — Send invitations to new team members (admins only)
+- **Calendar status sync** — Update employee status automatically from calendar events
+- **Forward calls by email** — Allow single calls to be forwarded from the call detail sheet to
+  the employee assigned to them (off by default; see
+  [Call management](/product/call-management#forward-by-email))
 
 ## Security
 
@@ -35,7 +39,7 @@ Create and manage API keys for programmatic access to TalkPilot.
 
 The raw API key is shown only once at creation time. Store it securely.
 
-**Available to:** Super-Admin, Dev-Admin, Client-Admin
+**Available to:** Super-Admin, Dev-Admin
 
 See [Authentication](/authentication) and [API Keys API](/api/api-keys) for details.
 
@@ -47,8 +51,12 @@ Manage soft-deleted calls:
 |--------|-------------|
 | **View** | Browse all calls in the trash |
 | **Restore** | Move a call back to the active list |
-| **Delete** | Permanently remove a call from the database |
-| **Empty trash** | Delete all trashed calls at once |
+| **Delete** | Permanently remove a call from the customer's view (cannot be undone) |
+| **Empty trash** | Remove all trashed calls at once |
+
+Deleting a call sets `calls.hidden_at`. The row and all of its data stay in the database — the call is simply no longer visible in the dashboard or the public API, and it cannot be restored from the UI. The data is removed by the regular retention cleanup once the agent's `retention_days` (default 90) have passed, or on a GDPR erasure request.
+
+Super-Admins and Dev-Admins see a separate **Permanently deleted calls** card below the trash listing these hidden calls (read-only).
 
 ### Auto-delete done calls
 

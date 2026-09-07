@@ -56,7 +56,7 @@ Response:
       "is_active": true,
       "language": "de",
       "llm_provider": "openai",
-      "llm_model": "gpt-4o",
+      "llm_model": "gpt-4.1",
       "voice_id": "sarah",
       "created_at": "2025-06-01T10:00:00Z"
     }
@@ -147,13 +147,13 @@ curl -H "X-API-Key: tp_live_YOUR_KEY_HERE" \
   "https://api.talkpilot.io/v1/agents/{agentId}/calls?limit=10&from=2026-03-01T00:00:00Z"
 ```
 
-### Enable vacation mode for an agent
+### Pause an agent
 
 ```bash
 curl -X PATCH \
   -H "X-API-Key: tp_live_YOUR_KEY_HERE" \
   -H "Content-Type: application/json" \
-  -d '{"vacation_mode": true, "vacation_end": "2026-04-01T00:00:00Z", "vacation_notdienst": true}' \
+  -d '{"is_active": false}' \
   https://api.talkpilot.io/v1/agents/{agentId}
 ```
 

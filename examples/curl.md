@@ -49,17 +49,13 @@ curl -X PATCH \
   "$TP_BASE/agents/{agentId}"
 ```
 
-### Enable vacation mode
+### Pause an agent
 
 ```bash
 curl -X PATCH \
   -H "X-API-Key: $TP_KEY" \
   -H "Content-Type: application/json" \
-  -d '{
-    "vacation_mode": true,
-    "vacation_end": "2026-04-01T00:00:00Z",
-    "vacation_notdienst": true
-  }' \
+  -d '{"is_active": false}' \
   "$TP_BASE/agents/{agentId}"
 ```
 
@@ -152,8 +148,8 @@ curl -X POST \
     "config": {
       "url": "https://crm.example.com/api/customers",
       "method": "GET",
-      "headers": [{ "key": "Authorization", "value": "Bearer YOUR_CRM_KEY" }],
-      "timeout": 30,
+      "headers": [{ "name": "Authorization", "value": "Bearer YOUR_CRM_KEY" }],
+      "timeout": "5000",
       "speak_during_execution": true,
       "speak_after_execution": true
     },
@@ -330,9 +326,10 @@ curl -H "X-API-Key: $TP_KEY" "$TP_BASE/organization"
 ### Update organization settings
 
 ```bash
+# The organization id comes from GET /organization (data[].id)
 curl -X PATCH \
   -H "X-API-Key: $TP_KEY" \
   -H "Content-Type: application/json" \
   -d '{"auto_delete_done_calls": true}' \
-  "$TP_BASE/organization"
+  "$TP_BASE/organization/{orgId}"
 ```

@@ -21,7 +21,7 @@ description: "Learn how to configure AI agents, manage your call center, and int
   <Card title="Code Examples" icon="terminal" href="/examples/curl">
     Ready-to-use code in cURL, JavaScript, and Python
   </Card>
-  <Card title="API Reference" icon="rectangle-terminal" href="/api-reference">
+  <Card title="API Reference" icon="rectangle-terminal" href="/api-reference/agents/list-agents">
     Full OpenAPI specification with all endpoints
   </Card>
 </CardGroup>
@@ -39,6 +39,7 @@ description: "Learn how to configure AI agents, manage your call center, and int
 | [**Agents**](/api/agents) | List, read, and update AI agent configurations |
 | [**Tools**](/api/tools) | Create, update, and delete agent tools (HTTP requests, call transfers, etc.) |
 | [**Employees**](/api/employees) | Manage employee records and availability status |
+| [**Contacts**](/api/contacts) | Manage the customer database — names, numbers and tags the agent greets callers with |
 | [**Forwarding Slots**](/api/forwarding-slots) | Configure call routing rules with priority-based forwarding |
 | [**Knowledge Base**](/api/knowledge-base) | Add, update, and remove knowledge base documents |
 | [**Calls**](/api/calls) | Read call records, transcripts, and audio URLs |
@@ -53,7 +54,7 @@ https://api.talkpilot.io/v1
 ## Key features
 
 - **API Key Authentication** — Scoped keys with granular permissions per resource
-- **Rate Limiting** — 60 req/min and 1,000 req/hour per key (customizable)
+- **Rate Limiting** — 60 requests/min and 1,000 requests/hour per key (configurable)
 - **Pagination** — All list endpoints support page-based pagination
 - **Consistent Error Format** — Structured error responses with request IDs for debugging
 - **Agent Scoping** — API keys can be restricted to specific agents

@@ -49,6 +49,22 @@ Click the note icon to open the note dialog. Notes are free text — use them fo
 
 Click the error icon to flag a call with an issue. Select the error type and add a description.
 
+### Forward by email
+
+Click **Forward** in the call detail sheet to send this single call by email to the employee
+assigned to it. The email uses the same layout as the automatic post-call notification:
+caller name, number, date, callback number, subject, summary, an audio link and the transcript.
+
+Rules:
+
+- The action only appears when **Forward calls by email** is enabled for the organization
+  (Settings → Organization).
+- The recipient is always exactly the assigned employee — never a distribution list. Without an
+  assignment, or when the assigned employee has no email address on file, the button stays
+  disabled and says why.
+- Read-only roles (`dev_employee`) cannot forward.
+- The audio link is freshly signed and expires after one hour; the recording is never attached.
+
 ## Call detail sheet
 
 Click on any call to open the detail side panel:

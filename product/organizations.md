@@ -28,7 +28,7 @@ Access via **Organisationen** in the sidebar (Super-Admin and Dev-Admin only).
 1. Expand an organization card
 2. Click **Einladen** (Invite)
 3. Enter the email address
-4. Select a role (see [Roles & Permissions](/roles-and-permissions))
+4. Select a role (see [Roles & Permissions](/product/roles-and-permissions))
 5. The invitee receives an email to join
 
 ## Multi-organization view

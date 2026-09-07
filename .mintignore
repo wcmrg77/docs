@@ -2,6 +2,10 @@
 # .git, .github, .claude, .agents, .idea, node_modules,
 # README.md, LICENSE.md, CHANGELOG.md, CONTRIBUTING.md
 
+# Interne Entwickler-Notizen (von CLAUDE.md verlinkt) — nicht Teil der oeffentlichen Doku
+component-map.md
+patterns.md
+
 # Draft content
 drafts/
 *.draft.mdx

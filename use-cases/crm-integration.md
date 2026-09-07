@@ -24,23 +24,31 @@ TalkPilot sends call data to your CRM after every completed call.
 
 ```javascript
 app.post("/webhooks/talkpilot", async (req, res) => {
-  const { call } = req.body;
+  const event = req.body;
+  if (event.event !== "call_ended") return res.json({ received: true });
 
-  // Create a CRM record
+  // The webhook carries the raw call (transcript, variables); name and summary
+  // are produced afterwards and available via GET /v1/agents/{id}/calls.
   await crm.createActivity({
-    customerPhone: call.phone_number,
-    customerName: call.customer_name,
-    subject: call.customer_request,
-    notes: call.call_summary,
-    duration: call.duration,
-    success: call.general_success,
-    recordingUrl: null, // Use the API to get the audio URL if needed
-    date: call.created_at,
+    externalId: event.call_id,
+    customerPhone: event.caller_phone,
+    customerName: event.pre_call_variables.kundenname ?? null,
+    subject: event.extracted_variables.anliegen ?? null,
+    transcript: event.transcript
+      .filter((t) => t.role === "user" || t.role === "assistant")
+      .map((t) => `${t.role}: ${t.text}`)
+      .join("\n"),
+    duration: event.duration_seconds,
+    outcome: event.disconnection_reason,
+    recordingUrl: event.recording_url,
+    date: event.timestamp,
   });
 
   res.json({ received: true });
 });
 ```
+
+The full payload and the signature check are documented in [Webhooks](/guides/webhooks).
 
 ### 2. Pull: API polling
 

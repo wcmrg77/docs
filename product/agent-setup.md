@@ -78,4 +78,4 @@ Not all users see the same settings:
 | Employees | Full | Full | Read-only |
 | Schedule | Full | Full | Read-only |
 
-See [Roles & Permissions](/roles-and-permissions) for the complete access matrix.
+See [Roles & Permissions](/product/roles-and-permissions) for the complete access matrix.

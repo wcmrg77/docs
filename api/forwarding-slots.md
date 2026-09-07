@@ -24,7 +24,10 @@ Forwarding slots define how the AI agent routes calls to the right person. Each 
 | `prioritaet_1` | string | Primary contact (phone number or name) |
 | `prioritaet_2` | string | Secondary fallback contact |
 | `prioritaet_3` | string | Tertiary fallback contact |
+| `kunde` | string | Free-text customer/segment label for the slot |
 | `agent_id` | uuid | Parent agent |
+| `created_at` | datetime | Creation timestamp |
+| `updated_at` | datetime | Last update timestamp |
 
 ## Endpoints
 
@@ -84,6 +87,8 @@ PUT /v1/agents/{agentId}/forwarding-slots
 
 Replaces **all** existing slots with the provided list in a single operation. Existing slots are deleted first. Use this for bulk synchronization from external systems.
 
+Every slot is validated first (`slotnummer` and `cases` are required, other fields must be strings or null); invalid rows are rejected with `400 VALIDATION_ERROR` (`details[].field` = `slots[i].<field>`) and nothing is written. The replacement itself runs in a single database transaction.
+
 ```bash
 curl -X PUT -H "X-API-Key: $TP_KEY" -H "Content-Type: application/json" \
   -d '{
@@ -123,6 +128,6 @@ Response includes `replaced_count` — the number of previous slots that were re
 
 ## Related resources
 
-- [Agents](/agents) — Parent resource
-- [Employees](/employees) — People referenced in slot priorities
+- [Agents](/api/agents) — Parent resource
+- [Employees](/api/employees) — People referenced in slot priorities
 - [Forwarding Slots](/product/forwarding-slots) — Dashboard UI guide

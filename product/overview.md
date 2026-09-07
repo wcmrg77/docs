@@ -31,10 +31,10 @@ TalkPilot is an AI-powered call center management platform. AI agents handle inb
 
 ## Getting started
 
-1. **[Set up an agent](/agent-setup)** — Create or add an AI agent
-2. **[Write a prompt](/prompt-and-greeting)** — Configure what the agent says and does
-3. **[Choose a voice](/voice-and-speech)** — Select the agent's voice and speech settings
-4. **[Add employees](/employee-management)** — Link human staff for call routing
-5. **[Configure forwarding](/forwarding-slots)** — Define how calls are routed
-6. **[Upload knowledge](/knowledge-base)** — Give the agent information to reference
-7. **[Set business hours](/schedule-and-vacation)** — Configure when the agent is active
+1. **[Set up an agent](/product/agent-setup)** — Create or add an AI agent
+2. **[Write a prompt](/product/prompt-and-greeting)** — Configure what the agent says and does
+3. **[Choose a voice](/product/voice-and-speech)** — Select the agent's voice and speech settings
+4. **[Add employees](/product/employee-management)** — Link human staff for call routing
+5. **[Configure forwarding](/product/forwarding-slots)** — Define how calls are routed
+6. **[Upload knowledge](/product/knowledge-base)** — Give the agent information to reference
+7. **[Set business hours](/product/schedule-and-vacation)** — Configure when the agent is active

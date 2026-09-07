@@ -3,28 +3,43 @@ title: "Knowledge Base"
 description: "Add, update, and remove knowledge base documents"
 ---
 
-The knowledge base is a RAG (Retrieval-Augmented Generation) document store for an agent. Upload documents with information the agent should reference during calls — product details, FAQs, pricing, opening hours, etc.
+The knowledge base is a RAG (Retrieval-Augmented Generation) document store. Upload documents with information an agent should reference during calls — product details, FAQs, pricing, opening hours, etc.
+
+## Ownership model
+
+Documents belong to an **organization**, not to a single agent. Which agent may use which document is a separate grant (`kb_agent_documents`), managed in the Dashboard under **Unternehmenswissen** (Company Knowledge) and on the agent's detail page.
+
+The endpoints stay addressed per agent (`/v1/agents/{agentId}/knowledge-base`) and return everything that agent can search, with a `scope` field:
+
+| `scope` | Meaning | Write access |
+|---|---|---|
+| `agent` | Created by this agent (through the API or its detail page); automatically granted to it | PATCH, DELETE, chunk endpoints |
+| `organization` | Company knowledge uploaded in the Dashboard and granted to this agent | read-only — write operations return `403 FORBIDDEN`; manage it under Unternehmenswissen |
+
+A document created through the API is assigned to the agent's organization **and** granted to that agent, so it is also visible in Company Knowledge and can be granted to further agents from there.
 
 ## Document lifecycle
 
 ```
-Create → pending → processing → completed (ready for search)
-                               → error (check error_message)
+Create → pending → processing → ready (searchable)
+                               → error / failed (check error_message)
 ```
 
-When a document is created, it's automatically chunked and embedded for vector search. This process runs asynchronously — poll the document status to check when it's ready.
+When a document is created, the processing pipeline picks it up (`pending`), chunks and embeds the `content` for vector search and sets the status to `ready`. This runs asynchronously — poll the document status to check when it's done. The status cannot be set through the API.
 
 ## Data model
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | uuid | Document identifier |
-| `agent_id` | uuid | Parent agent |
+| `agent_id` | uuid | Creating agent; null for organization-level documents |
+| `org_id` | uuid | Owning organization |
+| `scope` | string | `agent` or `organization` — see above |
 | `title` | string | Document title |
 | `content` | string | Text content (null for file-based documents) |
-| `source_type` | string | `manual`, `pdf`, `csv`, `txt`, `docx` |
-| `source_url` | string | Storage URL (file uploads only) |
-| `status` | string | `pending`, `processing`, `completed`, `error` |
+| `source_type` | string | `manual` for documents created via the API; Dashboard uploads carry their file type or `website` |
+| `source_url` | string | Source URL (Dashboard uploads and website imports only) |
+| `status` | string | `pending`, `processing`, `ready`, `error`, `failed` |
 | `chunk_count` | integer | Number of chunks created for embedding |
 | `error_message` | string | Error details (if status is `error`) |
 | `created_at` | datetime | Creation timestamp |
@@ -44,7 +59,7 @@ GET /v1/agents/{agentId}/knowledge-base
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `status` | string | Filter by processing status (`pending`, `processing`, `completed`, `error`) |
+| `status` | string | Filter by processing status (`pending`, `processing`, `ready`, `error`, `failed`) |
 
 ### Get document
 
@@ -62,9 +77,9 @@ POST /v1/agents/{agentId}/knowledge-base
 
 **Permission:** `kb:write`
 
-Creates a text-based document. The content is automatically chunked and embedded.
+Creates a text-based document (`source_type: manual`). The content is chunked and embedded by the processing pipeline.
 
-**Note:** File uploads (PDF, DOCX, XLSX, PPTX) are only available through the Dashboard UI.
+**Note:** File uploads and website imports are only available through the Dashboard UI.
 
 ```bash
 curl -X POST -H "X-API-Key: $TP_KEY" -H "Content-Type: application/json" \
@@ -83,7 +98,7 @@ PATCH /v1/agents/{agentId}/knowledge-base/{documentId}
 
 **Permission:** `kb:write`
 
-If the `content` field changes, the document is automatically re-chunked and re-embedded.
+Updatable: `title`, `content`. If `content` changes, the status goes back to `pending` and the pipeline re-chunks and re-embeds the document. Other fields (including `status`) are ignored.
 
 ### Delete document
 
@@ -97,7 +112,7 @@ Deletes the document and all associated chunks and embeddings.
 
 ## Direct Chunk API
 
-For advanced integrations, you can write pre-processed chunks directly to an agent's knowledge base — bypassing the automatic chunking pipeline. This is useful when your external system handles its own text splitting and embedding generation.
+For advanced integrations, you can write pre-processed chunks directly to a document — replacing what the automatic pipeline produced. This is useful when your external system handles its own text splitting and embedding generation.
 
 ### Chunk data model
 
@@ -173,24 +188,31 @@ Removes all chunks for the given document. Useful before re-uploading updated ch
 ### Typical external integration flow
 
 ```
-1. Create a document (POST /knowledge-base)         → get document_id
-2. Generate chunks + embeddings in your system
-3. Upload chunks (POST /knowledge-base/{id}/chunks)  → chunks stored
-4. Update document status to "completed" (PATCH)     → agent can search
+1. Create a document with a short placeholder content (POST /knowledge-base) → document_id
+2. Poll GET /knowledge-base/{id} until status is "ready" (the pipeline has processed the placeholder)
+3. Generate chunks + embeddings in your system
+4. Delete the pipeline's chunks (DELETE /knowledge-base/{id}/chunks)
+5. Upload your chunks (POST /knowledge-base/{id}/chunks) → searchable immediately
 ```
+
+Do not `PATCH` the document's `content` afterwards — that re-triggers the pipeline, which rebuilds the chunks from `content`. The document status is managed by the pipeline and cannot be set via the API.
 
 ### Access control
 
 Chunk operations are scoped to your organization. You can only write chunks for agents that belong to an organization you are a member of.
 
+### Retrieval
+
+During a call the agent searches the chunks of every document it has been granted — the documents it created through the API plus everything ticked for it in Company Knowledge. Chunks of documents the agent was not granted are never returned.
+
 ## Relationship to the KB tool
 
-For the agent to actually use the knowledge base during calls, a tool of type `knowledge_base` must be configured and enabled on the agent. See [Tools — knowledge_base](/tools.md#knowledge_base).
+For the agent to actually use the knowledge base during calls, a tool of type `knowledge_base` must be configured and enabled on the agent. See [Tools — knowledge_base](/api/tools#knowledge_base).
 
-The Dashboard automatically activates the KB tool when documents become ready and deactivates it when no ready documents remain.
+The Dashboard automatically activates the KB tool when a document granted to the agent becomes ready and deactivates it when the agent has no ready document left.
 
 ## Related resources
 
-- [Agents](/agents) — Parent resource
-- [Tools](/tools) — The `knowledge_base` tool type
+- [Agents](/api/agents) — Parent resource
+- [Tools](/api/tools) — The `knowledge_base` tool type
 - [Knowledge Base](/product/knowledge-base) — Dashboard UI guide

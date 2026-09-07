@@ -35,6 +35,8 @@ Each API key has granular permissions that control which resources it can access
 | `calls:read` | List and read call records and transcripts |
 | `organization:read` | Read organization settings |
 | `organization:write` | Update organization settings |
+| `contacts:read` | List and read contacts (customer database) |
+| `contacts:write` | Create, update, and delete contacts |
 
 When a request requires a permission the key doesn't have, the API returns `403 Forbidden`:
 
@@ -54,7 +56,7 @@ API keys can optionally be restricted to specific agents via `allowed_agent_ids`
 
 - **List endpoints** only return agents in the allowed list
 - **Resource endpoints** (tools, employees, calls, etc.) only work for allowed agents
-- Accessing a non-allowed agent returns `404 Not Found` (not `403`, to avoid leaking agent IDs)
+- Accessing an agent outside the allowed list returns `403 AGENT_NOT_ACCESSIBLE`; agents that belong to another organization return `404 Not Found`
 
 This is useful for integrations that should only access a subset of your agents — e.g., giving a CRM integration access to one specific agent's employee data.
 
@@ -98,4 +100,5 @@ API keys can have an optional expiration date. Expired keys return `401 Unauthor
 |--------|------|---------|
 | `401` | `UNAUTHORIZED` | Missing, invalid, inactive, or expired API key |
 | `403` | `FORBIDDEN` | Key lacks required permission for this endpoint |
+| `403` | `AGENT_NOT_ACCESSIBLE` | Agent is outside the key's `allowed_agent_ids` |
 | `429` | `RATE_LIMITED` | Too many requests — see [Rate Limiting](/guides/rate-limiting) |

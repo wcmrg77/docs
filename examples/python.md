@@ -86,20 +86,14 @@ updated = talkpilot(f"/agents/{agent_id}", method="PATCH", data={
 print(f"Agent updated: {updated['name']}")
 ```
 
-## Toggle vacation mode
+## Pause and resume an agent
 
 ```python
-# Enable vacation mode
-talkpilot(f"/agents/{agent_id}", method="PATCH", data={
-    "vacation_mode": True,
-    "vacation_end": "2026-04-01T00:00:00Z",
-    "vacation_notdienst": True,
-})
+# Stop accepting calls
+talkpilot(f"/agents/{agent_id}", method="PATCH", data={"is_active": False})
 
-# Disable vacation mode
-talkpilot(f"/agents/{agent_id}", method="PATCH", data={
-    "vacation_mode": False,
-})
+# Resume
+talkpilot(f"/agents/{agent_id}", method="PATCH", data={"is_active": True})
 ```
 
 ## Manage employees
@@ -233,12 +227,20 @@ def upload_chunks(agent_id, title, chunks_data):
 
     chunks_data: list of dicts with 'content' and optional 'metadata'
     """
-    # 1. Create parent document
+    # 1. Create parent document (content must not be empty - the pipeline processes it)
     doc = talkpilot(f"/agents/{agent_id}/knowledge-base", method="POST", data={
         "title": title,
-        "content": "",
+        "content": f"{title} (chunks maintained externally)",
     })
     doc_id = doc["id"]
+
+    # 1b. Wait until the pipeline has processed the placeholder
+    status = doc["status"]
+    while status != "ready":
+        time.sleep(5)
+        status = talkpilot(f"/agents/{agent_id}/knowledge-base/{doc_id}")["status"]
+        if status in ("error", "failed"):
+            raise RuntimeError(f"Processing failed for {doc_id}")
 
     # 2. Generate embeddings
     texts = [c["content"] for c in chunks_data]
@@ -255,7 +257,8 @@ def upload_chunks(agent_id, title, chunks_data):
             "metadata": chunk.get("metadata", {}),
         })
 
-    # 4. Upload chunks
+    # 4. Replace the pipeline's chunks with ours
+    talkpilot(f"/agents/{agent_id}/knowledge-base/{doc_id}/chunks", method="DELETE")
     result = talkpilot(
         f"/agents/{agent_id}/knowledge-base/{doc_id}/chunks",
         method="POST",
@@ -263,13 +266,8 @@ def upload_chunks(agent_id, title, chunks_data):
     )
     print(f"Uploaded {result['inserted_count']} chunks for '{title}'")
 
-    # 5. Mark document as completed
-    talkpilot(
-        f"/agents/{agent_id}/knowledge-base/{doc_id}",
-        method="PATCH",
-        data={"status": "completed"},
-    )
-
+    # 5. Done - the chunks are searchable right away. Do not PATCH `content`
+    #    afterwards: that re-triggers the pipeline, which rebuilds the chunks.
     return doc_id
 
 

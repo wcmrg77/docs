@@ -7,7 +7,7 @@ Tools are functions that an AI agent can invoke during a call. They extend the a
 
 ## Tool types
 
-TalkPilot supports 7 tool types:
+The API accepts all 14 tool types of the product:
 
 | Type | Description |
 |------|-------------|
@@ -18,6 +18,15 @@ TalkPilot supports 7 tool types:
 | `extract_variable` | Extract structured data from the conversation (email, phone, etc.) |
 | `play_tone` | Play DTMF tones (for IVR navigation) |
 | `knowledge_base` | Search the agent's knowledge base documents |
+| `set_call_result` | Let the agent record a call outcome (outbound campaigns); no config |
+| `identify_caller` | Identify the caller against your system (case number + postcode handshake via your webhooks) |
+| `switch_agent` | Hand the call over to another agent of your organization |
+| `verify_value` | Deterministic check of a dictated value (e.g. postcode) against rules |
+| `resolve_contact` | Establish how to reach the caller before a booking (`contact_mode: phone`) |
+| `list_available_slots` | Offer free appointment slots from the organization's connected calendar |
+| `book_appointment` | Book the chosen slot (same config as `list_available_slots`) |
+
+Each type's required fields and ranges are checked on create and update; violations return `400 VALIDATION_ERROR` with `details[].field = "config"` and a message naming the sub-field.
 
 ## Data model
 
@@ -28,10 +37,11 @@ TalkPilot supports 7 tool types:
 | `name` | string | Internal name for LLM function calling (max 100 chars) |
 | `display_name` | string | Human-readable name (max 255 chars) |
 | `description` | string | Description shown to the LLM (max 2,000 chars) |
-| `tool_type` | string | One of the 7 types above |
+| `tool_type` | string | One of the types above (immutable after creation) |
 | `config` | object | Tool-specific configuration (see below) |
 | `is_enabled` | boolean | Whether the tool is active |
 | `priority` | integer | Execution priority (lower = higher priority) |
+| `employee_id` | uuid | Transfer tools only: link to an employee. When set, `config.phone_number` is derived from the employee and kept in sync — sending a different number returns `409 CONFLICT` |
 | `created_at` | datetime | Creation timestamp |
 | `updated_at` | datetime | Last update timestamp |
 
@@ -46,12 +56,12 @@ Make HTTP requests to external APIs during a call.
   "url": "https://crm.example.com/api/customers",
   "method": "GET",
   "headers": [
-    { "key": "Authorization", "value": "Bearer {{API_KEY}}" }
+    { "name": "Authorization", "value": "Bearer {{API_KEY}}" }
   ],
   "query_params": [
-    { "key": "phone", "value": "{{caller_phone}}" }
+    { "name": "phone", "value": "{{caller_phone}}" }
   ],
-  "timeout": 30,
+  "timeout": "5000",
   "speak_during_execution": true,
   "speak_after_execution": true
 }
@@ -61,11 +71,15 @@ Make HTTP requests to external APIs during a call.
 |-------------|------|-------------|
 | `url` | string | Target URL (SSRF-protected — no internal IPs) |
 | `method` | string | `GET`, `POST`, `PUT`, `DELETE` |
-| `headers` | array | Key-value header pairs |
-| `query_params` | array | Key-value query parameters |
-| `timeout` | number | Request timeout in seconds |
+| `headers` | array | Objects of the form `{ "name": ..., "value": ... }` |
+| `query_params` | array | Objects of the form `{ "name": ..., "value": ... }` |
+| `timeout` | string | Request timeout in **milliseconds**, as a string (e.g. `"5000"`) |
 | `speak_during_execution` | boolean | Agent speaks while waiting for response |
 | `speak_after_execution` | boolean | Agent speaks the result to the caller |
+
+<Warning>
+`timeout` must be a string and header/query entries must use the key `name`. The API rejects `"timeout": 30` or `{ "key": ... }` with `400 VALIDATION_ERROR` — the voice agent would otherwise silently drop those entries.
+</Warning>
 
 ### transfer_call
 
@@ -159,6 +173,93 @@ Search the agent's knowledge base using RAG (Retrieval-Augmented Generation).
 | `similarity_threshold` | number | Minimum similarity score (0-1) |
 | `bridging_sentence` | string | What the agent says while searching |
 
+### switch_agent
+
+Hand the live call over to another agent of your organization; prompt, voice and tools come from the target agent.
+
+```json
+{
+  "target_agent_id": "5c1f0f9e-2b7a-4d3e-9c1a-0f6b2d7e8a11",
+  "ring_count": 1,
+  "intro_instructions": "Stell dich kurz als Kollege aus der Buchhaltung vor."
+}
+```
+
+| Config field | Type | Description |
+|-------------|------|-------------|
+| `target_agent_id` | uuid | Agent to hand over to (required) |
+| `ring_count` | integer | Ring tones before the handover, 0–3 (default 1) |
+| `intro_instructions` | string | Optional override for how the new agent introduces itself (max 2,000 chars) |
+
+### identify_caller
+
+Caller identification via a case-number + postcode handshake against your own webhooks (`lookup_url`, `fetch_case_url`, optional `verify_plz_url`, digit settings for `aktenzeichen` and `plz`). Set this up together with TalkPilot support.
+
+### verify_value
+
+Deterministic check of a dictated value: the value is parsed from the transcript, the rules are evaluated top to bottom (first match wins), and the resulting outcome carries its own fixed wording — the model never decides the result.
+
+```json
+{
+  "value": { "name": "plz", "type": "digits" },
+  "rules": [{ "match": "in", "values": ["10115", "10117"], "outcome": "ok" }],
+  "default_outcome": "nein",
+  "unresolved_outcome": "nein",
+  "outcomes": {
+    "ok":   { "say": "Danke, das passt." },
+    "nein": { "say": "Leider liegt das außerhalb unseres Gebiets." }
+  }
+}
+```
+
+Every outcome referenced in `rules`, `default_outcome` and `unresolved_outcome` must be a key of `outcomes`.
+
+### list_available_slots / book_appointment
+
+Appointment booking on the organization's connected calendar (Dashboard > Kalender). Both tools take the **same** config — they work on one slot grid.
+
+```json
+{
+  "business_hours": { "mon": [["09:00", "12:00"], ["13:00", "17:00"]], "tue": [["09:00", "17:00"]] },
+  "duration_minutes": 60,
+  "lead_time_hours": 24,
+  "search_window_days": 14,
+  "contact_mode": "email",
+  "email_variable": "email"
+}
+```
+
+| Config field | Type | Description |
+|-------------|------|-------------|
+| `business_hours` | object | Required. Keys `mon`…`sun`; each a list of `[start, end]` in zero-padded `HH:MM` (Europe/Berlin), start before end; a missing day means closed |
+| `duration_minutes` | integer | 15–480, default 60 |
+| `lead_time_hours` | integer | 0–168, default 24 — earliest bookable slot counted from the call |
+| `search_window_days` | integer | 1–60, default 14 |
+| `contact_mode` | string | `email` (default): the address from `email_variable` is required and the caller is invited. `phone`: a `resolve_contact` tool clears the channel first |
+| `email_variable` | string | Key in the extracted variables holding the caller's e-mail (default `email`) |
+
+### resolve_contact
+
+Runs before a booking in `contact_mode: phone` and establishes how to reach the caller (calling number, dictated mobile number, e-mail). All sentences are yours; `{mitarbeiter}` is the only placeholder.
+
+```json
+{
+  "employee_name": "Herr Seiler",
+  "confirm_calling_number": "Kann {mitarbeiter} Sie unter der Nummer erreichen, von der Sie anrufen?",
+  "ask_mobile": "Haben Sie eine Mobilnummer, unter der {mitarbeiter} Sie erreicht?",
+  "ask_mobile_anonymous": "Ihre Nummer ist unterdrückt – unter welcher Nummer erreicht {mitarbeiter} Sie?",
+  "ask_other_number": "Gibt es eine andere Nummer?",
+  "ask_email": "Haben Sie alternativ eine E-Mail-Adresse?",
+  "no_contact": "Ohne Kontaktmöglichkeit können wir leider keinen Termin vereinbaren."
+}
+```
+
+| Config field | Type | Description |
+|-------------|------|-------------|
+| `employee_name` | string | Inserted for `{mitarbeiter}` (1–100 chars) |
+| `confirm_calling_number`, `ask_mobile`, `ask_mobile_anonymous`, `ask_other_number`, `ask_email`, `no_contact` | string | Required sentences, 5–500 chars each |
+| `phone_variable`, `email_variable` | string | Keys in the extracted variables (defaults `caller_phone`, `email`) |
+
 ## Endpoints
 
 ### List tools
@@ -199,8 +300,8 @@ curl -X POST -H "X-API-Key: $TP_KEY" -H "Content-Type: application/json" \
     "config": {
       "url": "https://crm.example.com/api/customers",
       "method": "GET",
-      "headers": [{"key": "Authorization", "value": "Bearer YOUR_KEY"}],
-      "timeout": 30,
+      "headers": [{"name": "Authorization", "value": "Bearer YOUR_KEY"}],
+      "timeout": "5000",
       "speak_during_execution": true,
       "speak_after_execution": true
     },
@@ -218,6 +319,8 @@ PATCH /v1/agents/{agentId}/tools/{toolId}
 
 **Permission:** `tools:write`
 
+Updatable: `name`, `display_name`, `description`, `config`, `is_enabled`, `priority`, `employee_id`. `tool_type` cannot be changed (a sent value is ignored); other unknown fields are ignored as well.
+
 ### Delete tool
 
 ```
@@ -228,6 +331,6 @@ DELETE /v1/agents/{agentId}/tools/{toolId}
 
 ## Related resources
 
-- [Agents](/agents) — Parent resource
-- [Knowledge Base](/knowledge-base) — Documents used by the `knowledge_base` tool
+- [Agents](/api/agents) — Parent resource
+- [Knowledge Base](/api/knowledge-base) — Documents used by the `knowledge_base` tool
 - [Tools Configuration](/product/tools-configuration) — Dashboard UI guide

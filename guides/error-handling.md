@@ -31,13 +31,13 @@ Every error response follows this structure:
 
 | Status | Code | Description |
 |--------|------|-------------|
-| `400` | `VALIDATION_ERROR` | Request body failed validation |
-| `400` | `BAD_REQUEST` | Malformed request (invalid JSON, missing headers, etc.) |
+| `400` | `VALIDATION_ERROR` | Request body failed validation, or is not valid JSON |
 | `401` | `UNAUTHORIZED` | Missing, invalid, inactive, or expired API key |
 | `403` | `FORBIDDEN` | API key lacks required permission |
+| `403` | `AGENT_NOT_ACCESSIBLE` | Agent is outside the key's `allowed_agent_ids` |
 | `404` | `NOT_FOUND` | Resource does not exist or is not accessible |
-| `409` | `CONFLICT` | Resource already exists (e.g., duplicate tool name) |
-| `429` | `RATE_LIMITED` | Too many requests — see [Rate Limiting](/rate-limiting) |
+| `409` | `CONFLICT` | Resource already exists (e.g., duplicate tool name) or contradicts a linked record |
+| `429` | `RATE_LIMITED` | Too many requests — see [Rate Limiting](/guides/rate-limiting) |
 | `500` | `INTERNAL_ERROR` | Server error — retry or contact support |
 
 ## Validation errors
@@ -52,7 +52,7 @@ When a request fails validation, the `details` array contains field-level errors
     "details": [
       { "field": "name", "message": "Required" },
       { "field": "phone_number", "message": "Must be a valid E.164 phone number" },
-      { "field": "status", "message": "Must be one of: anwesend, urlaub, krank, weiterbildung, notdienst" }
+      { "field": "status", "message": "Must be one of: anwesend, urlaub, krank, weiterbildung, notdienst, im_termin, ausser_haus" }
     ],
     "request_id": "req_abc123"
   }

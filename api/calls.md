@@ -27,7 +27,7 @@ Calls are read-only records created by the system when an agent handles a phone 
 | `duration` | integer | Call duration in seconds |
 | `done` | boolean | Whether the call has been processed |
 | `general_success` | boolean | Whether the call was successful |
-| `disconnection_reason` | string | `user_hangup`, `call_transfer`, `agent_hangup` |
+| `disconnection_reason` | string | `user_hangup`, `agent_hangup`, `call_transfer`, `unknown`; outbound calls also `busy`, `no_answer`, `dial_error` |
 | `call_summary` | string | AI-generated call summary |
 | `employee` | string | Assigned employee name |
 | `note` | string | Manual note added by staff |
@@ -42,8 +42,8 @@ Calls are read-only records created by the system when an agent handles a phone 
 | Field | Type | Description |
 |-------|------|-------------|
 | `transcript` | string | JSON string of conversation `[{"role":"agent","text":"..."},...]` |
-| `audio_file_url` | string | Signed URL to call recording (expires after 1 hour) |
-| `final_score` | integer | AI-generated quality score (1-10) |
+| `audio_file_url` | string | Recording URL as stored by the voice agent. It is not re-signed by the API and may have expired — use the Dashboard for playback |
+| `final_score` | number | AI-generated quality score (1-10) |
 
 ## Endpoints
 
@@ -55,7 +55,7 @@ GET /v1/agents/{agentId}/calls
 
 **Permission:** `calls:read` | **Pagination:** yes (ordered by `created_at` descending)
 
-Soft-deleted calls are excluded by default.
+Soft-deleted calls are excluded by default. Calls that were permanently deleted in the Dashboard trash are never returned, not even with `include_deleted=true`.
 
 **Filters:**
 
@@ -84,7 +84,7 @@ GET /v1/agents/{agentId}/calls/{callId}
 
 Returns full call details including transcript and audio URL.
 
-**Note:** Purged calls (`is_purged: true`) will have `transcript`, `audio_file_url`, and `phone_number` set to null.
+**Note:** Purged calls (`is_purged: true`) have had their personal data removed by the retention process — expect `transcript`, `audio_file_url`, and `phone_number` to be null.
 
 ```json
 {
@@ -104,8 +104,10 @@ Returns full call details including transcript and audio URL.
   "employee": "Max Mustermann",
   "note": "Rueckruf vereinbart fuer Donnerstag",
   "is_purged": false,
+  "deleted_at": null,
   "agent_id": "550e8400-e29b-41d4-a716-446655440000",
-  "created_at": "2026-03-19T10:30:00Z"
+  "created_at": "2026-03-19T10:30:00Z",
+  "updated_at": "2026-03-19T10:35:00Z"
 }
 ```
 
@@ -157,5 +159,6 @@ while (page <= totalPages) {
 
 ## Related resources
 
-- [Agents](/agents) — Parent resource
+- [Agents](/api/agents) — Parent resource
+- [Webhooks](/guides/webhooks) — Get notified about calls instead of polling
 - [Call Management](/product/call-management) — Dashboard UI guide

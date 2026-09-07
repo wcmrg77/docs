@@ -15,11 +15,7 @@
         "groups": [
           {
             "group": "Getting Started",
-            "pages": [
-              "introduction",
-              "getting-started",
-              "authentication"
-            ]
+            "pages": ["introduction", "getting-started", "authentication"]
           },
           {
             "group": "Product Guide",
@@ -44,11 +40,7 @@
           },
           {
             "group": "Use Cases",
-            "pages": [
-              "use-cases/receptionist",
-              "use-cases/customer-support",
-              "use-cases/crm-integration"
-            ]
+            "pages": ["use-cases/receptionist", "use-cases/customer-support", "use-cases/crm-integration"]
           }
         ]
       },
@@ -59,8 +51,10 @@
             "group": "API Resources",
             "pages": [
               "api/agents",
+              "api/workflow",
               "api/tools",
               "api/employees",
+              "api/contacts",
               "api/forwarding-slots",
               "api/knowledge-base",
               "api/calls",
@@ -69,55 +63,117 @@
             ]
           },
           {
-            "group": "Guides",
+            "group": "Endpoint Reference",
             "pages": [
-              "guides/pagination",
-              "guides/error-handling",
-              "guides/rate-limiting",
-              "guides/webhooks"
+              { "group": "Health", "pages": ["api-reference/health/health-check"] },
+              {
+                "group": "Agents",
+                "pages": [
+                  "api-reference/agents/list-agents",
+                  "api-reference/agents/get-agent-details",
+                  "api-reference/agents/update-agent-settings",
+                  "api-reference/agents/get-agent-status"
+                ]
+              },
+              {
+                "group": "Workflow",
+                "pages": ["api-reference/workflow/get-workflow", "api-reference/workflow/replace-workflow"]
+              },
+              {
+                "group": "Tools",
+                "pages": [
+                  "api-reference/tools/list-agent-tools",
+                  "api-reference/tools/create-a-tool",
+                  "api-reference/tools/get-a-tool",
+                  "api-reference/tools/update-a-tool",
+                  "api-reference/tools/delete-a-tool"
+                ]
+              },
+              {
+                "group": "Employees",
+                "pages": [
+                  "api-reference/employees/list-employees",
+                  "api-reference/employees/create-an-employee",
+                  "api-reference/employees/get-an-employee",
+                  "api-reference/employees/update-an-employee",
+                  "api-reference/employees/delete-an-employee"
+                ]
+              },
+              {
+                "group": "Contacts",
+                "pages": [
+                  "api-reference/contacts/list-contacts",
+                  "api-reference/contacts/create-a-contact",
+                  "api-reference/contacts/get-a-contact",
+                  "api-reference/contacts/update-a-contact",
+                  "api-reference/contacts/delete-a-contact"
+                ]
+              },
+              {
+                "group": "Forwarding Slots",
+                "pages": [
+                  "api-reference/forwarding-slots/list-forwarding-slots",
+                  "api-reference/forwarding-slots/create-a-forwarding-slot",
+                  "api-reference/forwarding-slots/replace-all-forwarding-slots",
+                  "api-reference/forwarding-slots/update-a-forwarding-slot",
+                  "api-reference/forwarding-slots/delete-a-forwarding-slot"
+                ]
+              },
+              {
+                "group": "Knowledge Base",
+                "pages": [
+                  "api-reference/knowledge-base/list-knowledge-base-documents",
+                  "api-reference/knowledge-base/create-a-knowledge-base-document",
+                  "api-reference/knowledge-base/get-a-knowledge-base-document",
+                  "api-reference/knowledge-base/update-a-knowledge-base-document",
+                  "api-reference/knowledge-base/delete-a-knowledge-base-document",
+                  "api-reference/knowledge-base/list-chunks-for-a-document",
+                  "api-reference/knowledge-base/create-chunks-batch",
+                  "api-reference/knowledge-base/delete-all-chunks-for-a-document"
+                ]
+              },
+              {
+                "group": "Calls",
+                "pages": ["api-reference/calls/list-calls", "api-reference/calls/get-call-details"]
+              },
+              {
+                "group": "Organization",
+                "pages": [
+                  "api-reference/organization/list-organizations",
+                  "api-reference/organization/update-organization-settings"
+                ]
+              },
+              {
+                "group": "API Keys",
+                "pages": [
+                  "api-reference/api-keys/list-api-keys",
+                  "api-reference/api-keys/create-an-api-key",
+                  "api-reference/api-keys/update-an-api-key",
+                  "api-reference/api-keys/revoke-an-api-key"
+                ]
+              }
             ]
           },
           {
+            "group": "Guides",
+            "pages": ["guides/pagination", "guides/error-handling", "guides/rate-limiting", "guides/webhooks"]
+          },
+          {
             "group": "Code Examples",
-            "pages": [
-              "examples/curl",
-              "examples/javascript",
-              "examples/python"
-            ]
+            "pages": ["examples/curl", "examples/javascript", "examples/python"]
           }
         ]
       }
     ],
     "global": {
-      "anchors": [
-        {
-          "anchor": "API Reference",
-          "href": "/api/agents",
-          "icon": "code"
-        }
-      ]
+      "anchors": [{ "anchor": "API Reference", "href": "/api/agents", "icon": "code" }]
     }
   },
-  "openapi": ["openapi.yaml"],
+  "api": { "openapi": ["openapi.yaml"] },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:support@talkpilot.io"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://app.talkpilot.io"
-    }
+    "links": [{ "label": "Support", "href": "mailto:support@talkpilot.io" }],
+    "primary": { "type": "button", "label": "Dashboard", "href": "https://app.talkpilot.io" }
   },
-  "footer": {
-    "socials": {
-      "website": "https://talkpilot.io"
-    }
-  },
-  "feedback": {
-    "thumbsRating": true
-  }
+  "footer": { "socials": { "website": "https://talkpilot.io" } },
+  "feedback": { "thumbsRating": true }
 }

@@ -84,7 +84,7 @@ Play DTMF tones — useful when the agent needs to navigate an IVR system.
 
 ### Knowledge Base Search
 
-Search the agent's knowledge base documents. See [Knowledge Base](/knowledge-base) for document management.
+Search the agent's knowledge base documents. See [Knowledge Base](/product/knowledge-base) for document management.
 
 | Setting | Description |
 |---------|-------------|

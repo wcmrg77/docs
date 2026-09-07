@@ -12,17 +12,17 @@ The TalkPilot API enforces per-key rate limits to ensure fair usage and system s
 | Per minute | 60 requests |
 | Per hour | 1,000 requests |
 
-These defaults can be customized per API key when creating the key in the Dashboard.
+Both limits are enforced and can be customized per API key when creating the key in the Dashboard.
 
 ## Rate limit headers
 
-Every API response includes these headers:
+Every response to a request authenticated with an API key includes these headers (requests authenticated with a Dashboard JWT are not rate limited and carry no headers):
 
 | Header | Description |
 |--------|-------------|
 | `X-RateLimit-Limit` | Maximum requests per minute for this key |
 | `X-RateLimit-Remaining` | Requests remaining in the current minute window |
-| `X-RateLimit-Reset` | Unix timestamp when the current window resets |
+| `X-RateLimit-Reset` | Unix timestamp roughly 60 seconds in the future (the window is a sliding minute) |
 
 Example response headers:
 
@@ -34,11 +34,11 @@ X-RateLimit-Reset: 1711108920
 
 ## When you hit the limit
 
-When rate limited, the API returns `429 Too Many Requests` with a `Retry-After` header:
+When rate limited, the API returns `429 Too Many Requests` with `Retry-After: 60` (minute window) or `Retry-After: 3600` (hour window):
 
 ```
 HTTP/1.1 429 Too Many Requests
-Retry-After: 18
+Retry-After: 60
 X-RateLimit-Limit: 60
 X-RateLimit-Remaining: 0
 X-RateLimit-Reset: 1711108920
@@ -48,7 +48,7 @@ X-RateLimit-Reset: 1711108920
 {
   "error": {
     "code": "RATE_LIMITED",
-    "message": "Rate limit exceeded. Try again in 18 seconds.",
+    "message": "Rate limit exceeded. Try again in 60 seconds.",
     "request_id": "req_abc123"
   }
 }

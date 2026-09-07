@@ -14,22 +14,24 @@ info:
     X-API-Key: tp_live_abc123def456...
     ```
 
-    API keys are scoped to a single organization and can be restricted to specific
-    agents and permissions. Create and manage keys in the TalkPilot Dashboard
-    under **Settings > API**.
+    An API key can reach every organization its creator is a member of (see
+    `GET /v1/organization`) and can be restricted to specific agents and permissions.
+    Create and manage keys in the TalkPilot Dashboard under **Settings > API**
+    (Super-Admin and Dev-Admin only).
 
     ## Rate Limiting
 
-    Default limits per API key:
-    - **60 requests/minute**
-    - **1,000 requests/hour**
+    Default limits per API key: **60 requests/minute** and **1,000 requests/hour**
+    (both enforced, both configurable per key).
 
-    Rate limit headers are included in every response:
+    Rate limit headers are included in every response to a request authenticated
+    with an API key (Dashboard JWT requests are not rate limited):
     - `X-RateLimit-Limit` — Max requests per minute
-    - `X-RateLimit-Remaining` — Remaining requests in current window
-    - `X-RateLimit-Reset` — Unix timestamp when the window resets
+    - `X-RateLimit-Remaining` — Remaining requests in the current minute window
+    - `X-RateLimit-Reset` — Unix timestamp roughly 60 seconds in the future
 
-    When rate limited, the API returns `429 Too Many Requests` with a `Retry-After` header.
+    When rate limited, the API returns `429 Too Many Requests` with `Retry-After: 60`
+    (minute window) or `Retry-After: 3600` (hour window).
 
     ## Pagination
 
@@ -59,6 +61,7 @@ info:
     email: support@talkpilot.io
   license:
     name: Proprietary
+    identifier: LicenseRef-Proprietary
 
 servers:
   - url: https://api.talkpilot.io
@@ -69,10 +72,14 @@ tags:
     description: API health and status
   - name: Agents
     description: Manage AI agent configurations
+  - name: Workflow
+    description: Multi-state conversation flow of an agent
   - name: Tools
     description: Manage agent tools (HTTP requests, call transfers, etc.)
   - name: Employees
     description: Manage employees linked to agents
+  - name: Contacts
+    description: Customer contacts (customer_database) per agent — the voice agent recognises callers and greets them by name or tag from here
   - name: Forwarding Slots
     description: Manage call forwarding slot assignments
   - name: Knowledge Base
@@ -82,7 +89,7 @@ tags:
   - name: Organization
     description: Organization-level settings
   - name: API Keys
-    description: Manage API keys (Dashboard JWT auth only)
+    description: Manage API keys (Dashboard JWT auth only; super_admin and dev_admin)
 
 security:
   - apiKey: []
@@ -111,7 +118,16 @@ paths:
                     example: ok
                   version:
                     type: string
+                    description: Semantic version of the API contract
                     example: "1.0.0"
+                  commit:
+                    type: string
+                    description: Git commit of the deployed function (`dev` when run locally)
+                    example: "0dfa0031c2e4"
+                  deployed_at:
+                    type: [string, "null"]
+                    format: date-time
+                    description: When this build was deployed
                   timestamp:
                     type: string
                     format: date-time
@@ -152,7 +168,7 @@ paths:
                     is_active: true
                     language: "de"
                     llm_provider: "openai"
-                    llm_model: "gpt-4o"
+                    llm_model: "gpt-4.1"
                     voice_id: "sarah"
                     created_at: "2025-06-01T10:00:00Z"
                 pagination:
@@ -162,6 +178,10 @@ paths:
                   pages: 1
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /v1/agents/{agentId}:
     get:
@@ -186,9 +206,9 @@ paths:
                 language: "de"
                 formality: "formal"
                 llm_provider: "openai"
-                llm_model: "gpt-4o"
+                llm_model: "gpt-4.1"
                 llm_temperature: 0.7
-                tts_provider: "openai"
+                tts_provider: "cartesia"
                 voice_id: "sarah"
                 realtime_voice: null
                 speaking_rate: 1.0
@@ -203,9 +223,6 @@ paths:
                       start_time: "08:00"
                       end_time: "18:00"
                 backup_agent_id: null
-                vacation_mode: false
-                vacation_end: null
-                vacation_notdienst: false
                 allow_greeting_interruption: true
                 short_calls_auto_edit: false
                 track_caller_name: true
@@ -214,6 +231,12 @@ paths:
                 updated_at: "2025-06-15T14:30:00Z"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     patch:
       operationId: updateAgent
@@ -223,8 +246,12 @@ paths:
         Partially update an agent's configuration. Only include the fields
         you want to change. Omitted fields remain unchanged.
 
-        **Note:** `phone_number`, `organization_id`, and `created_by` cannot be
-        changed via the API.
+        **Note:** `phone_number`, `organization_id`, `metadata` and `retention_days`
+        are read-only via the API; `workflow` has its own endpoint.
+
+        **This endpoint is strict:** any field that is not updatable (unknown or
+        read-only) is rejected with `400 VALIDATION_ERROR`, one `details` entry per
+        field. The other `PATCH` endpoints ignore unknown fields.
       parameters:
         - $ref: "#/components/parameters/AgentId"
       requestBody:
@@ -252,12 +279,6 @@ paths:
                       - days: [1, 2, 3, 4, 5]
                         start_time: "09:00"
                         end_time: "17:00"
-              enableVacation:
-                summary: Enable vacation mode
-                value:
-                  vacation_mode: true
-                  vacation_end: "2026-04-01T00:00:00Z"
-                  vacation_notdienst: true
       responses:
         "200":
           description: Updated agent
@@ -269,6 +290,12 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /v1/agents/{agentId}/status:
     get:
@@ -276,8 +303,9 @@ paths:
       tags: [Agents]
       summary: Get agent status
       description: |
-        Lightweight endpoint returning only the agent's active status,
-        schedule, and vacation state. Useful for monitoring dashboards.
+        Lightweight endpoint returning only the agent's active status and
+        schedule, plus the computed `is_within_schedule`. Useful for monitoring
+        dashboards.
       parameters:
         - $ref: "#/components/parameters/AgentId"
       responses:
@@ -295,14 +323,6 @@ paths:
                     type: string
                   is_active:
                     type: boolean
-                  vacation_mode:
-                    type: boolean
-                  vacation_end:
-                    type: string
-                    format: date-time
-                    nullable: true
-                  vacation_notdienst:
-                    type: boolean
                   schedule:
                     $ref: "#/components/schemas/AgentSchedule"
                   is_within_schedule:
@@ -312,9 +332,6 @@ paths:
                 id: "550e8400-e29b-41d4-a716-446655440000"
                 name: "Rezeption Bot"
                 is_active: true
-                vacation_mode: false
-                vacation_end: null
-                vacation_notdienst: false
                 schedule:
                   timezone: "Europe/Berlin"
                   rules:
@@ -322,6 +339,114 @@ paths:
                       start_time: "08:00"
                       end_time: "18:00"
                 is_within_schedule: true
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  # ──────────────────────────────────────────
+  # Workflow
+  # ──────────────────────────────────────────
+  /v1/agents/{agentId}/workflow:
+    get:
+      operationId: getWorkflow
+      tags: [Workflow]
+      summary: Get workflow
+      description: |
+        Returns the multi-state conversation flow of an agent. Single-prompt
+        agents have no workflow — `workflow` is `null` for them.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      responses:
+        "200":
+          description: Workflow of the agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+    put:
+      operationId: replaceWorkflow
+      tags: [Workflow]
+      summary: Replace workflow
+      description: |
+        Replaces the workflow completely — there is no partial update. The body
+        may be the workflow object itself or wrapped as `{"workflow": {...}}`.
+        Send `{"workflow": null}` to remove the workflow; the agent then runs as a
+        single-prompt agent again.
+
+        The workflow is validated against the same rules the voice runtime
+        enforces. An invalid workflow is rejected with `400 VALIDATION_ERROR`
+        listing every problem found, and nothing is written.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/Workflow"
+                - type: object
+                  required: [workflow]
+                  properties:
+                    workflow:
+                      oneOf:
+                        - $ref: "#/components/schemas/Workflow"
+                        - type: "null"
+            examples:
+              replace:
+                summary: Replace the flow
+                value:
+                  name: "Inbound Call Flow"
+                  description: "intent_analysis routes, callback_info is terminal."
+                  steps:
+                    - id: "intent_analysis"
+                      name: "Anruf-Analyse"
+                      description: "Erkenne das Anliegen und route weiter."
+                      completion: "Anliegen erkannt und weitergeleitet."
+                      step_type: "prompt"
+                      next:
+                        - id: "callback_info"
+                    - id: "callback_info"
+                      name: "Rückruf-Daten aufnehmen"
+                      description: "Nimm die fehlenden Pflichtangaben auf."
+                      completion: "Daten erfasst, Anruf beendet."
+                      step_type: "prompt"
+                      next: []
+              clear:
+                summary: Remove the workflow
+                value:
+                  workflow: null
+      responses:
+        "200":
+          description: Stored workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   # ──────────────────────────────────────────
   # Agent Tools
@@ -360,8 +485,15 @@ paths:
                       url: "https://crm.example.com/api/customers"
                       method: "GET"
                       headers:
-                        - key: "Authorization"
+                        - name: "Authorization"
                           value: "Bearer {{API_KEY}}"
+                      timeout: "5000"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     post:
       operationId: createTool
@@ -375,8 +507,11 @@ paths:
 
         - **`http_request`** — Make HTTP requests to external APIs
           ```json
-          { "url": "https://...", "method": "GET", "headers": [{"key":"...", "value":"..."}], "query_params": [{"key":"...", "value":"..."}], "timeout": 30, "speak_during_execution": true, "speak_after_execution": true }
+          { "url": "https://...", "method": "GET", "headers": [{"name":"...", "value":"..."}], "query_params": [{"name":"...", "value":"..."}], "timeout": "5000", "speak_during_execution": true, "speak_after_execution": true }
           ```
+          `timeout` is a **string in milliseconds**; header/query entries use the key
+          `name`. `"timeout": 30` or `{"key": ...}` are rejected with `400`, because the
+          voice agent silently drops such entries.
         - **`transfer_call`** — Cold/warm call transfer
           ```json
           { "phone_number": "+49...", "transfer_mode": "cold", "play_hold_music": false }
@@ -401,6 +536,33 @@ paths:
           ```json
           { "top_k": 5, "similarity_threshold": 0.7, "bridging_sentence": "Einen Moment..." }
           ```
+        - **`set_call_result`** — Let the agent record a call outcome (outbound campaigns); no config, send `{}`
+        - **`switch_agent`** — Hand the live call over to another agent of your organization
+          ```json
+          { "target_agent_id": "<agent uuid>", "ring_count": 1, "intro_instructions": "optional" }
+          ```
+        - **`identify_caller`** — Identify the caller against your system via a
+          case-number + postcode handshake through your own webhooks
+          (`lookup_url`, `fetch_case_url`, optional `verify_plz_url`, digit settings for
+          `aktenzeichen` and `plz`). Set this up together with TalkPilot support.
+        - **`verify_value`** — Deterministic check of a dictated value; every outcome
+          referenced in `rules`, `default_outcome` and `unresolved_outcome` must be a key of `outcomes`
+          ```json
+          { "value": { "name": "plz", "type": "digits" }, "rules": [{ "match": "in", "values": ["10115"], "outcome": "ok" }], "default_outcome": "nein", "unresolved_outcome": "nein", "outcomes": { "ok": { "say": "Passt." }, "nein": { "say": "Leider nicht." } } }
+          ```
+        - **`list_available_slots`** / **`book_appointment`** — appointment booking on the
+          organization's connected calendar; both tools share the same config
+          ```json
+          { "business_hours": { "mon": [["09:00", "12:00"], ["13:00", "17:00"]] }, "duration_minutes": 60, "lead_time_hours": 24, "search_window_days": 14, "contact_mode": "email", "email_variable": "email" }
+          ```
+        - **`resolve_contact`** — clears the contact channel before a booking in `contact_mode: phone`;
+          all sentences are yours, `{mitarbeiter}` is the only placeholder
+          ```json
+          { "employee_name": "Herr Seiler", "confirm_calling_number": "...", "ask_mobile": "...", "ask_mobile_anonymous": "...", "ask_other_number": "...", "ask_email": "...", "no_contact": "..." }
+          ```
+
+        Each type's required fields and ranges are checked on create and update
+        (`400 VALIDATION_ERROR` with `details[].field = "config"`).
       parameters:
         - $ref: "#/components/parameters/AgentId"
       requestBody:
@@ -421,9 +583,9 @@ paths:
                     url: "https://crm.example.com/api/customers"
                     method: "GET"
                     headers:
-                      - key: "Authorization"
+                      - name: "Authorization"
                         value: "Bearer {{API_KEY}}"
-                    timeout: 30
+                    timeout: "5000"
                     speak_during_execution: true
                     speak_after_execution: true
                   priority: 1
@@ -461,6 +623,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /v1/agents/{agentId}/tools/{toolId}:
     get:
@@ -479,12 +647,20 @@ paths:
                 $ref: "#/components/schemas/AgentTool"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     patch:
       operationId: updateTool
       tags: [Tools]
       summary: Update a tool
-      description: Partially update a tool's configuration. Only include changed fields.
+      description: |
+        Partially update a tool. Only include changed fields. `tool_type` cannot be
+        changed — a sent value is ignored, as are unknown fields.
       parameters:
         - $ref: "#/components/parameters/AgentId"
         - $ref: "#/components/parameters/ToolId"
@@ -510,6 +686,12 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     delete:
       operationId: deleteTool
@@ -523,6 +705,12 @@ paths:
           description: Tool deleted
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   # ──────────────────────────────────────────
   # Employees
@@ -578,6 +766,12 @@ paths:
                   limit: 20
                   total: 5
                   pages: 1
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     post:
       operationId: createEmployee
@@ -607,6 +801,12 @@ paths:
                 $ref: "#/components/schemas/Employee"
         "400":
           $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /v1/agents/{agentId}/employees/{employeeId}:
     get:
@@ -625,6 +825,12 @@ paths:
                 $ref: "#/components/schemas/Employee"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     patch:
       operationId: updateEmployee
@@ -667,6 +873,12 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     delete:
       operationId: deleteEmployee
@@ -680,6 +892,244 @@ paths:
           description: Employee deleted
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  # ──────────────────────────────────────────
+  # Contacts
+  # ──────────────────────────────────────────
+  /v1/agents/{agentId}/contacts:
+    get:
+      operationId: listContacts
+      tags: [Contacts]
+      summary: List contacts
+      description: |
+        Returns the agent's contacts (customer database), newest first.
+        Filter by an exact phone number (matched against `phone_number`,
+        `mobile_number` and `landline_number`, like the voice agent does), by a
+        tag, or by a free-text search over name, company, e-mail and numbers.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: phone_number
+          in: query
+          description: Exact E.164 number; matches any of the three number fields
+          schema:
+            type: string
+            example: "+491711234567"
+        - name: tag
+          in: query
+          description: Only contacts carrying this tag (exact, case-sensitive)
+          schema:
+            type: string
+            example: "vip"
+        - name: search
+          in: query
+          description: Case-insensitive substring search over customer_name, company, email and the number fields
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of contacts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Contact"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+              example:
+                data:
+                  - id: "3f1c2a9e-5b7d-4e2f-9a1b-0c8d7e6f5a4b"
+                    agent_id: "550e8400-e29b-41d4-a716-446655440000"
+                    customer_name: "Herr Fey"
+                    salutation: "Herr"
+                    first_name: null
+                    last_name: "Fey"
+                    name_parsed: "manual"
+                    name_source: "manual"
+                    phone_number: "+491711234567"
+                    mobile_number: "+491711234567"
+                    landline_number: "+492215550"
+                    email: "fey@example.com"
+                    address: "Musterstraße 1, 50667 Köln"
+                    company: "Fey GmbH"
+                    tags: ["vip", "stammkunde"]
+                    note: "Bevorzugt Rückruf am Vormittag"
+                    customer_number: 4711
+                    last_contact_date: "2026-09-01T09:30:00Z"
+                    created_at: "2026-08-01T10:00:00Z"
+                    updated_at: "2026-09-01T09:30:00Z"
+                pagination:
+                  page: 1
+                  limit: 20
+                  total: 1
+                  pages: 1
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+    post:
+      operationId: createContact
+      tags: [Contacts]
+      summary: Create a contact
+      description: |
+        Creates a contact for the agent. Name handling follows the Dashboard:
+        send `salutation`/`first_name`/`last_name` and `customer_name` is
+        composed from them (`name_parsed: manual`); send only `customer_name`
+        and it is split automatically where unambiguous (`auto`), otherwise the
+        full name is kept in `last_name` with `name_parsed: unclear` — the voice
+        agent only greets contacts by name when `name_parsed` is not `unclear`.
+        `phone_number` (the number the agent matches callers against) is derived
+        from `mobile_number` (preferred) or `landline_number` when either is sent.
+        All numbers must be E.164. `name_source` is set to `manual`.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactCreate"
+            examples:
+              withParts:
+                summary: Name parts (greeted by name)
+                value:
+                  salutation: "Herr"
+                  last_name: "Fey"
+                  mobile_number: "+491711234567"
+                  email: "fey@example.com"
+                  company: "Fey GmbH"
+                  tags: ["vip"]
+              displayNameOnly:
+                summary: Display name only (split automatically)
+                value:
+                  customer_name: "Tobias Lutz"
+                  landline_number: "+492215550"
+      responses:
+        "201":
+          description: Contact created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/agents/{agentId}/contacts/{contactId}:
+    get:
+      operationId: getContact
+      tags: [Contacts]
+      summary: Get a contact
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/ContactId"
+      responses:
+        "200":
+          description: Contact details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+    patch:
+      operationId: updateContact
+      tags: [Contacts]
+      summary: Update a contact
+      description: |
+        Partial update. Name parts and numbers are merged with the stored
+        contact, so `{"first_name": "Max"}` keeps the stored salutation and
+        last name and recomposes `customer_name`. Sending `customer_name`
+        alone re-splits it; `"customer_name": null` clears every name field.
+        Sending `mobile_number` or `landline_number` re-derives `phone_number`.
+        A changed name sets `name_source` to `manual`. Unknown and read-only
+        fields are ignored.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/ContactId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactUpdate"
+            examples:
+              addTag:
+                summary: Tag a contact (drives greeting_variants)
+                value:
+                  tags: ["vip"]
+              fixName:
+                summary: Correct the first name
+                value:
+                  first_name: "Max"
+              newNumber:
+                summary: New mobile number
+                value:
+                  mobile_number: "+491719876543"
+      responses:
+        "200":
+          description: Updated contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+    delete:
+      operationId: deleteContact
+      tags: [Contacts]
+      summary: Delete a contact
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/ContactId"
+      responses:
+        "204":
+          description: Contact deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   # ──────────────────────────────────────────
   # Forwarding Slots
@@ -724,6 +1174,12 @@ paths:
                     prioritaet_2: null
                     prioritaet_3: null
                     agent_id: "550e8400-e29b-41d4-a716-446655440000"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     post:
       operationId: createForwardingSlot
@@ -752,6 +1208,12 @@ paths:
                 $ref: "#/components/schemas/ForwardingSlot"
         "400":
           $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     put:
       operationId: replaceAllForwardingSlots
@@ -761,6 +1223,10 @@ paths:
         Replaces all forwarding slots for an agent in a single operation.
         Existing slots are deleted and replaced with the provided list.
         Useful for bulk synchronization from external systems.
+
+        Atomic: every slot is validated first (each needs `slotnummer` and `cases`;
+        invalid rows are rejected with `400` and nothing is written), then the old
+        slots are replaced in a single transaction.
       parameters:
         - $ref: "#/components/parameters/AgentId"
       requestBody:
@@ -803,6 +1269,12 @@ paths:
                     description: Number of previous slots that were replaced
         "400":
           $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /v1/agents/{agentId}/forwarding-slots/{slotId}:
     patch:
@@ -830,6 +1302,12 @@ paths:
                 $ref: "#/components/schemas/ForwardingSlot"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     delete:
       operationId: deleteForwardingSlot
@@ -843,6 +1321,12 @@ paths:
           description: Slot deleted
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   # ──────────────────────────────────────────
   # Knowledge Base
@@ -852,6 +1336,10 @@ paths:
       operationId: listKbDocuments
       tags: [Knowledge Base]
       summary: List knowledge base documents
+      description: |
+        Returns the documents this agent can search: the ones it created (`scope: agent`)
+        and the organization's shared company knowledge granted to it in the Dashboard
+        (`scope: organization`, read-only via the API).
       parameters:
         - $ref: "#/components/parameters/AgentId"
         - $ref: "#/components/parameters/PageParam"
@@ -861,7 +1349,7 @@ paths:
           description: Filter by processing status
           schema:
             type: string
-            enum: [pending, processing, completed, error]
+            enum: [pending, processing, ready, error, failed]
       responses:
         "200":
           description: List of KB documents
@@ -883,7 +1371,7 @@ paths:
                     title: "Preisliste 2026"
                     content: "Unsere aktuellen Preise..."
                     source_type: "manual"
-                    status: "completed"
+                    status: "ready"
                     chunk_count: 3
                     created_at: "2025-06-01T10:00:00Z"
                 pagination:
@@ -891,16 +1379,24 @@ paths:
                   limit: 20
                   total: 2
                   pages: 1
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     post:
       operationId: createKbDocument
       tags: [Knowledge Base]
       summary: Create a knowledge base document
       description: |
-        Create a new knowledge base document with text content.
-        The content will be automatically chunked and embedded for retrieval.
+        Create a new knowledge base document with text content
+        (`source_type: manual`). The processing pipeline picks it up
+        (`pending` → `processing` → `ready`), chunks and embeds the content.
+        The status cannot be set via the API.
 
-        For file uploads (PDF, etc.), use the Dashboard UI.
+        For file uploads and website imports, use the Dashboard UI.
       parameters:
         - $ref: "#/components/parameters/AgentId"
       requestBody:
@@ -925,6 +1421,12 @@ paths:
                 $ref: "#/components/schemas/KbDocument"
         "400":
           $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /v1/agents/{agentId}/knowledge-base/{documentId}:
     get:
@@ -943,14 +1445,21 @@ paths:
                 $ref: "#/components/schemas/KbDocument"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     patch:
       operationId: updateKbDocument
       tags: [Knowledge Base]
       summary: Update a knowledge base document
       description: |
-        Update a document's title or content. If content changes,
-        the document will be re-chunked and re-embedded automatically.
+        Update a document's title or content. If content changes, the status goes
+        back to `pending` and the pipeline re-chunks and re-embeds the document.
+        Other fields (including `status`) are ignored.
       parameters:
         - $ref: "#/components/parameters/AgentId"
         - $ref: "#/components/parameters/DocumentId"
@@ -974,6 +1483,12 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     delete:
       operationId: deleteKbDocument
@@ -988,6 +1503,12 @@ paths:
           description: Document deleted
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   # ──────────────────────────────────────────
   # Knowledge Base Chunks (Direct Access)
@@ -1034,6 +1555,12 @@ paths:
                   pages: 1
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     post:
       operationId: createKbChunks
@@ -1042,6 +1569,7 @@ paths:
       description: |
         Insert one or more pre-processed chunks for a document.
         Use this when your external system handles its own text splitting and embedding generation.
+        Embeddings are write-only: they are never returned by the read endpoints.
 
         The `embedding` field expects a 1536-dimensional vector compatible with
         OpenAI's `text-embedding-3-small` model. Chunks without embeddings will not
@@ -1100,6 +1628,12 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
     delete:
       operationId: deleteKbChunks
@@ -1116,6 +1650,12 @@ paths:
           description: All chunks deleted
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   # ──────────────────────────────────────────
   # Calls (Read-Only)
@@ -1128,7 +1668,8 @@ paths:
       description: |
         Returns calls for the specified agent with optional filtering.
         Results are ordered by `created_at` descending (newest first).
-        Soft-deleted calls are excluded by default.
+        Soft-deleted calls are excluded by default. Calls permanently deleted in
+        the Dashboard trash are never returned, not even with `include_deleted=true`.
       parameters:
         - $ref: "#/components/parameters/AgentId"
         - $ref: "#/components/parameters/PageParam"
@@ -1201,6 +1742,12 @@ paths:
                   limit: 20
                   total: 150
                   pages: 8
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /v1/agents/{agentId}/calls/{callId}:
     get:
@@ -1209,8 +1756,9 @@ paths:
       summary: Get call details
       description: |
         Returns full call details including transcript and audio URL.
-        Purged calls will have `transcript`, `audio_file_url`, and
-        `phone_number` set to null.
+        Purged calls (`is_purged: true`) have had their personal data removed by
+        the retention process — expect `transcript`, `audio_file_url`, and
+        `phone_number` to be null.
       parameters:
         - $ref: "#/components/parameters/AgentId"
         - $ref: "#/components/parameters/CallId"
@@ -1244,33 +1792,60 @@ paths:
                 updated_at: "2026-03-19T10:35:00Z"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   # ──────────────────────────────────────────
   # Organization
   # ──────────────────────────────────────────
   /v1/organization:
     get:
-      operationId: getOrganization
+      operationId: listOrganizations
       tags: [Organization]
-      summary: Get organization settings
-      description: Returns the organization associated with the API key.
+      summary: List organizations
+      description: |
+        Returns every organization the caller has access to — for an API key, the
+        organizations its creator is a member of. Not paginated.
       responses:
         "200":
-          description: Organization settings
+          description: Organizations
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Organization"
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Organization"
               example:
-                id: "org-uuid-1"
-                name: "Mustermann GmbH"
-                auto_delete_done_calls: false
-                created_at: "2025-01-01T00:00:00Z"
+                data:
+                  - id: "org-uuid-1"
+                    name: "Mustermann GmbH"
+                    auto_delete_done_calls: false
+                    created_at: "2025-01-01T00:00:00Z"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
+  /v1/organization/{orgId}:
     patch:
       operationId: updateOrganization
       tags: [Organization]
       summary: Update organization settings
+      description: |
+        The organization must be one the caller has access to; otherwise
+        `404 NOT_FOUND`. Updatable: the five boolean switches and `notdienst_bereiche`;
+        `name`, `max_concurrent_calls` and `concurrency_overflow_number` are read-only.
+      parameters:
+        - $ref: "#/components/parameters/OrgId"
       requestBody:
         required: true
         content:
@@ -1288,6 +1863,14 @@ paths:
                 $ref: "#/components/schemas/Organization"
         "400":
           $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   # ──────────────────────────────────────────
   # API Keys (Dashboard JWT auth only)
@@ -1298,8 +1881,9 @@ paths:
       tags: [API Keys]
       summary: List API keys
       description: |
-        Lists all API keys for the current user's organization.
-        **Requires Supabase JWT authentication** (not API key auth).
+        Lists the API keys the caller may manage: a `dev_admin` sees the keys they
+        created themselves, a `super_admin` sees all keys. Other roles receive
+        `403 FORBIDDEN`. **Requires Supabase JWT authentication** (not API key auth).
         The actual key values are never returned — only the prefix for identification.
       security:
         - bearerAuth: []
@@ -1319,7 +1903,11 @@ paths:
                 data:
                   - id: "key-uuid-1"
                     name: "n8n Production"
-                    key_prefix: "tp_live_"
+                    key_prefix: "tp_live_a1"
+                    organization_id: "org-uuid-1"
+                    organization_name: "Mustermann GmbH"
+                    created_by_email: "admin@mustermann.example"
+                    is_own: true
                     permissions:
                       - "agents:read"
                       - "agents:write"
@@ -1332,6 +1920,11 @@ paths:
                     last_used_at: "2026-03-19T09:15:00Z"
                     expires_at: null
                     created_at: "2026-01-15T10:00:00Z"
+                    updated_at: "2026-03-19T09:15:00Z"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
     post:
       operationId: createApiKey
@@ -1341,7 +1934,12 @@ paths:
         Creates a new API key. **The raw key is returned only once in the response.**
         Store it securely — it cannot be retrieved again.
 
-        **Requires Supabase JWT authentication** (not API key auth).
+        `organization_id` is optional and sets the key's home organization; it must be
+        one of the caller's memberships (otherwise `400`). The key's data scope at
+        request time is resolved from the creator's memberships, not from this field.
+
+        **Requires Supabase JWT authentication** (not API key auth); `super_admin` or
+        `dev_admin` only.
       security:
         - bearerAuth: []
       requestBody:
@@ -1382,11 +1980,24 @@ paths:
                     type: array
                     items:
                       type: string
+                  allowed_agent_ids:
+                    type: [array, "null"]
+                    items:
+                      type: string
+                      format: uuid
+                  rate_limit_per_minute:
+                    type: integer
+                  rate_limit_per_hour:
+                    type: integer
                   created_at:
                     type: string
                     format: date-time
         "400":
           $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /v1/api-keys/{keyId}:
     patch:
@@ -1435,6 +2046,10 @@ paths:
                 $ref: "#/components/schemas/ApiKeyInfo"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
     delete:
       operationId: deleteApiKey
@@ -1459,6 +2074,10 @@ paths:
           description: Key revoked
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
 # ════════════════════════════════════════════
 # Components
@@ -1503,6 +2122,14 @@ components:
       schema:
         type: string
         format: uuid
+    ContactId:
+      name: contactId
+      in: path
+      required: true
+      description: Contact UUID
+      schema:
+        type: string
+        format: uuid
     SlotId:
       name: slotId
       in: path
@@ -1524,6 +2151,14 @@ components:
       in: path
       required: true
       description: Call UUID
+      schema:
+        type: string
+        format: uuid
+    OrgId:
+      name: orgId
+      in: path
+      required: true
+      description: Organization UUID (from `GET /v1/organization`)
       schema:
         type: string
         format: uuid
@@ -1558,15 +2193,50 @@ components:
               message: "Invalid or missing API key"
               request_id: "req_abc123"
     Forbidden:
-      description: Insufficient permissions
+      description: |
+        Insufficient permissions (`FORBIDDEN`), or the agent is outside the key's
+        `allowed_agent_ids` (`AGENT_NOT_ACCESSIBLE`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            missingPermission:
+              value:
+                error:
+                  code: FORBIDDEN
+                  message: "API key lacks required permission: agents:write"
+                  request_id: "req_abc123"
+            agentNotAccessible:
+              value:
+                error:
+                  code: AGENT_NOT_ACCESSIBLE
+                  message: "API key does not have access to this agent"
+                  request_id: "req_abc123"
+    RateLimited:
+      description: Too many requests for this API key (60/minute or 1,000/hour by default)
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying — 60 for the minute window, 3600 for the hour window
+          schema:
+            type: integer
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
           example:
             error:
-              code: FORBIDDEN
-              message: "API key lacks required permission: agents:write"
+              code: RATE_LIMITED
+              message: "Rate limit exceeded. Try again in 60 seconds."
               request_id: "req_abc123"
     NotFound:
       description: Resource not found
@@ -1608,13 +2278,11 @@ components:
               type: string
               enum:
                 - VALIDATION_ERROR
-                - INVALID_REQUEST
                 - UNAUTHORIZED
                 - FORBIDDEN
                 - AGENT_NOT_ACCESSIBLE
                 - NOT_FOUND
                 - CONFLICT
-                - UNPROCESSABLE_ENTITY
                 - RATE_LIMITED
                 - INTERNAL_ERROR
             message:
@@ -1651,6 +2319,10 @@ components:
         id:
           type: string
           format: uuid
+        organization_id:
+          type: string
+          format: uuid
+          readOnly: true
         name:
           type: string
         phone_number:
@@ -1658,84 +2330,73 @@ components:
         is_active:
           type: boolean
         language:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Language code: de, en, fr, es"
         formality:
-          type: string
-          nullable: true
+          type: [string, "null"]
           enum: [formal, informal]
           description: "formal = Sie, informal = Du"
         llm_provider:
-          type: string
-          nullable: true
+          type: [string, "null"]
           enum: [azure, openai, gemini, gemini_live, gemini_live_cascade, openai_realtime, openai_realtime_cascade, groq]
         llm_model:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Model identifier, e.g. gpt-4.1, gemini-2.5-flash, meta-llama/llama-4-scout-17b-16e-instruct, llama-3.3-70b-versatile, llama-3.1-8b-instant"
         llm_temperature:
-          type: number
-          nullable: true
+          type: [number, "null"]
           minimum: 0
           maximum: 2
         tts_provider:
-          type: string
-          nullable: true
+          type: [string, "null"]
           enum: [cartesia, elevenlabs, gemini_live, openai_realtime]
         voice_id:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Voice identifier for TTS"
         realtime_voice:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Voice for native realtime providers (OpenAI/Gemini)"
         speaking_rate:
-          type: number
-          nullable: true
+          type: [number, "null"]
           minimum: 0.5
           maximum: 2.0
         stt_provider:
-          type: string
-          nullable: true
+          type: [string, "null"]
           enum: [deepgram, elevenlabs, mistral, groq]
           description: "Speech-to-text provider (null for native realtime)"
+        stt_keywords:
+          type: [array, "null"]
+          maxItems: 100
+          items:
+            type: string
+          description: "Words the speech recognizer should prefer (names, products); max 100"
         prompt:
           type: string
           description: "System prompt for the agent"
           maxLength: 50000
         greeting:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Initial greeting message when call starts"
           maxLength: 2000
+        greeting_variants:
+          type: [array, "null"]
+          items:
+            $ref: "#/components/schemas/GreetingVariant"
+          description: |
+            Personalised greetings. The first variant whose conditions all match the
+            caller wins; otherwise `greeting` is spoken. A variant is only spoken when
+            every placeholder in it has a value.
         post_call_webhook_url:
-          type: string
+          type: [string, "null"]
           format: uri
-          nullable: true
           description: "Webhook URL called after each call completes"
         schedule:
           $ref: "#/components/schemas/AgentSchedule"
         backup_agent_id:
-          type: string
+          type: [string, "null"]
           format: uuid
-          nullable: true
-          description: "Fallback agent when outside schedule or in vacation mode"
-        vacation_mode:
-          type: boolean
-          description: "Whether vacation mode is enabled"
-        vacation_end:
-          type: string
-          format: date-time
-          nullable: true
-          description: "When vacation mode should automatically end"
-        vacation_notdienst:
-          type: boolean
-          description: "Whether emergency service is active during vacation"
+          description: "Fallback agent when outside the schedule"
         allow_greeting_interruption:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
           description: "Allow callers to interrupt the greeting"
         short_calls_auto_edit:
           type: boolean
@@ -1744,17 +2405,81 @@ components:
           type: boolean
           description: "Ask for and track the caller's name"
         transfer_timeout_seconds:
+          type: [integer, "null"]
+          minimum: 5
+          maximum: 45
+          description: "Timeout in seconds for call transfers (5-45)"
+        bundesland:
+          $ref: "#/components/schemas/Bundesland"
+        background_audio_enabled:
+          type: boolean
+          description: "Play ambient background audio during the call"
+        background_audio_type:
+          $ref: "#/components/schemas/BackgroundAudioType"
+        background_audio_volume:
           type: number
-          nullable: true
-          minimum: 10
-          maximum: 120
-          description: "Timeout in seconds for call transfers"
+          minimum: 0
+          maximum: 1
+        thinking_sound_enabled:
+          type: boolean
+          description: "Play a subtle sound while the agent waits for the LLM"
+        thinking_sound_volume:
+          type: number
+          minimum: 0
+          maximum: 1
+        aic_enhancement_enabled:
+          type: boolean
+          description: "On-device voice-focus enhancement (ai-coustics) before speech recognition"
+        retention_days:
+          type: [integer, "null"]
+          readOnly: true
+          description: "GDPR retention of call data in days (null = default 90). Managed in the Dashboard"
+        metadata:
+          type: [object, "null"]
+          readOnly: true
+          description: "Provider-specific tuning (e.g. Flux/EOU settings). Managed in the Dashboard"
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+
+    GreetingVariant:
+      type: object
+      required: [greeting]
+      description: |
+        Needs `greeting` plus at least one condition (`tag`, a time window `from`+`to`,
+        or `min_calls_today`). Several conditions are combined with AND; the order of
+        the variants is the priority. Unknown keys are rejected.
+      properties:
+        greeting:
+          type: string
+          description: "May use {{vorname}}, {{nachname}}, {{anrede}} (from the contact) and pre-call webhook variables"
+        tag:
+          type: string
+          description: "A tag of the caller's contact (customer database), compared case-insensitively"
+        from:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          description: "Start of the time window, HH:MM Europe/Berlin (inclusive). Requires `to`"
+        to:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          description: "End of the time window (exclusive). `from` > `to` wraps past midnight"
+        min_calls_today:
+          type: integer
+          minimum: 1
+          description: "Caller has already called at least this many times today"
+
+    Bundesland:
+      type: string
+      enum: [DE, BW, BY, BE, BB, HB, HH, HE, MV, NI, NW, NRW, RP, SL, SN, ST, SH, TH]
+      description: "German state for public-holiday handling; DE = nationwide holidays only"
+
+    BackgroundAudioType:
+      type: string
+      enum: [office, cafe, home_office]
 
     AgentUpdate:
       type: object
@@ -1767,81 +2492,84 @@ components:
         is_active:
           type: boolean
         language:
-          type: string
-          nullable: true
+          type: [string, "null"]
         formality:
-          type: string
-          nullable: true
+          type: [string, "null"]
           enum: [formal, informal]
         llm_provider:
-          type: string
-          nullable: true
+          type: [string, "null"]
         llm_model:
-          type: string
-          nullable: true
+          type: [string, "null"]
         llm_temperature:
-          type: number
-          nullable: true
+          type: [number, "null"]
           minimum: 0
           maximum: 2
         tts_provider:
-          type: string
-          nullable: true
+          type: [string, "null"]
         voice_id:
-          type: string
-          nullable: true
+          type: [string, "null"]
         realtime_voice:
-          type: string
-          nullable: true
+          type: [string, "null"]
         speaking_rate:
-          type: number
-          nullable: true
+          type: [number, "null"]
           minimum: 0.5
           maximum: 2.0
         stt_provider:
-          type: string
-          nullable: true
+          type: [string, "null"]
+        stt_keywords:
+          type: [array, "null"]
+          maxItems: 100
+          items:
+            type: string
         prompt:
           type: string
           maxLength: 50000
         greeting:
-          type: string
-          nullable: true
+          type: [string, "null"]
           maxLength: 2000
+        greeting_variants:
+          type: [array, "null"]
+          items:
+            $ref: "#/components/schemas/GreetingVariant"
         post_call_webhook_url:
-          type: string
+          type: [string, "null"]
           format: uri
-          nullable: true
         schedule:
           $ref: "#/components/schemas/AgentSchedule"
         backup_agent_id:
-          type: string
+          type: [string, "null"]
           format: uuid
-          nullable: true
-        vacation_mode:
-          type: boolean
-        vacation_end:
-          type: string
-          format: date-time
-          nullable: true
-        vacation_notdienst:
-          type: boolean
+        bundesland:
+          $ref: "#/components/schemas/Bundesland"
         allow_greeting_interruption:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
         short_calls_auto_edit:
           type: boolean
         track_caller_name:
           type: boolean
         transfer_timeout_seconds:
+          type: [integer, "null"]
+          minimum: 5
+          maximum: 45
+        background_audio_enabled:
+          type: boolean
+        background_audio_type:
+          $ref: "#/components/schemas/BackgroundAudioType"
+        background_audio_volume:
           type: number
-          nullable: true
-          minimum: 10
-          maximum: 120
+          minimum: 0
+          maximum: 1
+        thinking_sound_enabled:
+          type: boolean
+        thinking_sound_volume:
+          type: number
+          minimum: 0
+          maximum: 1
+        aic_enhancement_enabled:
+          type: boolean
 
     AgentSchedule:
-      type: object
-      nullable: true
+      type: [object, "null"]
       description: |
         Agent business hours. When set, the agent only accepts calls during
         the specified time windows. Outside hours, calls go to the backup agent.
@@ -1875,6 +2603,87 @@ components:
                 description: "End time in HH:mm"
                 example: "18:00"
 
+    # ── Workflow ──
+    Workflow:
+      type: object
+      required: [name, steps]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: [string, "null"]
+          maxLength: 500
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/WorkflowStep"
+
+    WorkflowStep:
+      type: object
+      required: [id, name, description, completion]
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: "Unique within the workflow"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          minLength: 1
+          maxLength: 20000
+          description: "The instructions for this state"
+        completion:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: "When this state counts as done"
+        step_type:
+          type: string
+          enum: [prompt, action]
+          default: prompt
+        tools:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+          description: "Tool names available in this state"
+        next:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/WorkflowNextEdge"
+          description: "Allowed follow-up states"
+
+    WorkflowNextEdge:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: "Must reference an existing step id"
+
+    WorkflowResponse:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+        workflow:
+          oneOf:
+            - $ref: "#/components/schemas/Workflow"
+            - type: "null"
+        updated_at:
+          type: string
+          format: date-time
+
     # ── Tool ──
     AgentTool:
       type: object
@@ -1889,8 +2698,7 @@ components:
           type: string
           description: "Internal tool name (used in LLM function calling)"
         display_name:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Human-readable display name"
         description:
           type: string
@@ -1901,12 +2709,19 @@ components:
           type: object
           description: "Tool-specific configuration (schema depends on tool_type)"
         is_enabled:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
         priority:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: "Execution priority (lower number = higher priority)"
+        employee_id:
+          type: [string, "null"]
+          format: uuid
+          description: >
+            Optional link to an employee, for transfer tools only
+            (`transfer_call`, `monitored_transfer`). When set, `config.phone_number`
+            is derived from `employees.phone_number` and kept in sync automatically —
+            changing the employee's number changes the transfer target.
+            `null` means the number is managed on the tool itself.
         created_at:
           type: string
           format: date-time
@@ -1924,8 +2739,7 @@ components:
           maxLength: 100
           description: "Internal tool name (lowercase, underscores)"
         display_name:
-          type: string
-          nullable: true
+          type: [string, "null"]
           maxLength: 255
         description:
           type: string
@@ -1939,8 +2753,15 @@ components:
           type: boolean
           default: true
         priority:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
+        employee_id:
+          type: [string, "null"]
+          format: uuid
+          description: >
+            Link this transfer tool to an employee. `config.phone_number` is then
+            derived from the employee and must not be sent with a different value —
+            doing so returns `409 CONFLICT`. The employee must belong to the same
+            agent and must have a phone number, otherwise `400 VALIDATION_ERROR`.
 
     AgentToolUpdate:
       type: object
@@ -1951,8 +2772,7 @@ components:
           minLength: 1
           maxLength: 100
         display_name:
-          type: string
-          nullable: true
+          type: [string, "null"]
           maxLength: 255
         description:
           type: string
@@ -1962,8 +2782,15 @@ components:
         is_enabled:
           type: boolean
         priority:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
+        employee_id:
+          type: [string, "null"]
+          format: uuid
+          description: >
+            Set to link the transfer tool to an employee, `null` to unlink and
+            manage the number on the tool again. While a link exists, sending a
+            `config.phone_number` that differs from the employee's number returns
+            `409 CONFLICT` — the derived value would silently win otherwise.
 
     ToolType:
       type: string
@@ -1975,8 +2802,15 @@ components:
         - extract_variable
         - play_tone
         - knowledge_base
+        - set_call_result
+        - identify_caller
+        - switch_agent
+        - verify_value
+        - resolve_contact
+        - list_available_slots
+        - book_appointment
       description: |
-        Available tool types:
+        Tool types accepted by the API:
         - `http_request` — Make HTTP requests to external APIs
         - `transfer_call` — Blind or warm call transfer
         - `monitored_transfer` — SIP INVITE transfer with monitoring
@@ -1984,6 +2818,13 @@ components:
         - `extract_variable` — Extract structured data (email, phone, etc.)
         - `play_tone` — Play DTMF tones
         - `knowledge_base` — Search the agent's knowledge base
+        - `set_call_result` — Record a call outcome (no config)
+        - `identify_caller` — Caller identification handshake via your webhooks
+        - `switch_agent` — Hand the call over to another agent
+        - `verify_value` — Deterministic check of a dictated value against rules
+        - `resolve_contact` — Establish how to reach the caller before booking (phone mode)
+        - `list_available_slots` — Offer free appointment slots from the connected calendar
+        - `book_appointment` — Book the chosen slot (same config as `list_available_slots`)
 
     # ── Employee ──
     Employee:
@@ -1995,12 +2836,10 @@ components:
         name:
           type: string
         phone_number:
-          type: string
-          nullable: true
+          type: [string, "null"]
         email:
-          type: string
+          type: [string, "null"]
           format: email
-          nullable: true
         status:
           $ref: "#/components/schemas/EmployeeStatus"
         active:
@@ -2009,9 +2848,19 @@ components:
           type: boolean
           description: "Whether the employee receives email notifications"
         agent_id:
-          type: string
+          type: [string, "null"]
           format: uuid
-          nullable: true
+        organization_id:
+          type: [string, "null"]
+          format: uuid
+          readOnly: true
+        back_at_work_at:
+          type: [string, "null"]
+          format: date
+          description: "Expected return date (YYYY-MM-DD) while absent"
+        notdienst_bereich:
+          type: [string, "null"]
+          description: "Emergency-duty area of the current shift (one of the organization's `notdienst_bereiche`). Cleared automatically when the status leaves `notdienst`"
         created_at:
           type: string
           format: date-time
@@ -2028,13 +2877,11 @@ components:
           minLength: 1
           maxLength: 255
         phone_number:
-          type: string
-          nullable: true
+          type: [string, "null"]
           maxLength: 30
         email:
-          type: string
+          type: [string, "null"]
           format: email
-          nullable: true
         status:
           $ref: "#/components/schemas/EmployeeStatus"
         active:
@@ -2043,6 +2890,12 @@ components:
         get_mail:
           type: boolean
           default: false
+        back_at_work_at:
+          type: [string, "null"]
+          format: date
+        notdienst_bereich:
+          type: [string, "null"]
+          description: "Only kept when status is `notdienst`"
 
     EmployeeUpdate:
       type: object
@@ -2053,19 +2906,23 @@ components:
           minLength: 1
           maxLength: 255
         phone_number:
-          type: string
-          nullable: true
+          type: [string, "null"]
           maxLength: 30
         email:
-          type: string
+          type: [string, "null"]
           format: email
-          nullable: true
         status:
           $ref: "#/components/schemas/EmployeeStatus"
         active:
           type: boolean
         get_mail:
           type: boolean
+        back_at_work_at:
+          type: [string, "null"]
+          format: date
+        notdienst_bereich:
+          type: [string, "null"]
+          description: "Only kept when status is `notdienst`; a status change away from it clears the area"
 
     EmployeeStatus:
       type: string
@@ -2075,6 +2932,8 @@ components:
         - krank
         - weiterbildung
         - notdienst
+        - im_termin
+        - ausser_haus
       description: |
         Employee availability status:
         - `anwesend` — Present / available
@@ -2082,6 +2941,129 @@ components:
         - `krank` — Sick leave
         - `weiterbildung` — In training
         - `notdienst` — Emergency duty
+        - `im_termin` — In a meeting
+        - `ausser_haus` — Out of office
+
+    # ── Contact ──
+    NameParsed:
+      type: string
+      enum: [auto, llm, manual, unclear]
+      readOnly: true
+      description: |
+        Whether `salutation`/`first_name`/`last_name` are usable for a personal
+        greeting. `manual` = parts sent explicitly, `auto` = split unambiguously
+        from `customer_name`, `llm` = split by the backfill, `unclear` = not
+        split (full name kept in `last_name`) — the voice agent then greets neutrally.
+
+    Contact:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agent_id:
+          type: string
+          format: uuid
+          readOnly: true
+        customer_name:
+          type: [string, "null"]
+          description: Display name, composed from the parts when they are given
+        salutation:
+          type: [string, "null"]
+          example: "Herr"
+        first_name:
+          type: [string, "null"]
+        last_name:
+          type: [string, "null"]
+        name_parsed:
+          $ref: "#/components/schemas/NameParsed"
+        name_source:
+          type: string
+          enum: [ai, manual]
+          readOnly: true
+          description: "`manual` = maintained by a person (API or Dashboard); the AI never overwrites such a name"
+        phone_number:
+          type: [string, "null"]
+          description: Primary number in E.164 — the voice agent matches callers against this and `mobile_number`
+        mobile_number:
+          type: [string, "null"]
+        landline_number:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+          format: email
+        address:
+          type: [string, "null"]
+        company:
+          type: [string, "null"]
+        tags:
+          type: [array, "null"]
+          items:
+            type: string
+          description: Free tags; an agent's `greeting_variants` can pick a greeting per tag
+        note:
+          type: [string, "null"]
+        customer_number:
+          type: [number, "null"]
+        last_contact_date:
+          type: [string, "null"]
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ContactCreate:
+      type: object
+      description: |
+        All fields optional. Either send name parts (`salutation`, `first_name`,
+        `last_name`) or a `customer_name` to split automatically. Numbers must be
+        E.164 (`+4922112345678`); `phone_number` is derived from
+        `mobile_number`/`landline_number` when either is present.
+      properties:
+        customer_name:
+          type: [string, "null"]
+        salutation:
+          type: [string, "null"]
+        first_name:
+          type: [string, "null"]
+        last_name:
+          type: [string, "null"]
+        phone_number:
+          type: [string, "null"]
+          description: Only needed when neither mobile_number nor landline_number is sent
+        mobile_number:
+          type: [string, "null"]
+        landline_number:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+          format: email
+        address:
+          type: [string, "null"]
+        company:
+          type: [string, "null"]
+        tags:
+          type: [array, "null"]
+          items:
+            type: string
+          description: Trimmed and de-duplicated; an empty list is stored as null
+        note:
+          type: [string, "null"]
+        customer_number:
+          type: [number, "null"]
+        last_contact_date:
+          type: [string, "null"]
+          format: date-time
+
+    ContactUpdate:
+      allOf:
+        - $ref: "#/components/schemas/ContactCreate"
+      description: |
+        Partial update; name parts and numbers are merged with the stored
+        contact. `customer_name: null` clears all name fields.
 
     # ── Forwarding Slot ──
     ForwardingSlot:
@@ -2099,25 +3081,29 @@ components:
           description: "Comma-separated case types this slot handles"
           example: "Rechnungsfragen, Zahlungsprobleme"
         slot_belegung:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Name of the person assigned to this slot"
         prioritaet_1:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Primary contact (name or phone number)"
         prioritaet_2:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Secondary contact (fallback)"
         prioritaet_3:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Tertiary contact (fallback)"
+        kunde:
+          type: [string, "null"]
+          description: "Free-text customer/segment label for this slot"
         agent_id:
-          type: string
+          type: [string, "null"]
           format: uuid
-          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
     ForwardingSlotCreate:
       type: object
@@ -2131,17 +3117,15 @@ components:
           type: string
           minLength: 1
         slot_belegung:
-          type: string
-          nullable: true
+          type: [string, "null"]
         prioritaet_1:
-          type: string
-          nullable: true
+          type: [string, "null"]
         prioritaet_2:
-          type: string
-          nullable: true
+          type: [string, "null"]
         prioritaet_3:
-          type: string
-          nullable: true
+          type: [string, "null"]
+        kunde:
+          type: [string, "null"]
 
     ForwardingSlotUpdate:
       type: object
@@ -2150,17 +3134,15 @@ components:
         cases:
           type: string
         slot_belegung:
-          type: string
-          nullable: true
+          type: [string, "null"]
         prioritaet_1:
-          type: string
-          nullable: true
+          type: [string, "null"]
         prioritaet_2:
-          type: string
-          nullable: true
+          type: [string, "null"]
         prioritaet_3:
-          type: string
-          nullable: true
+          type: [string, "null"]
+        kunde:
+          type: [string, "null"]
 
     # ── Knowledge Base ──
     KbDocument:
@@ -2170,32 +3152,38 @@ components:
           type: string
           format: uuid
         agent_id:
-          type: string
+          type: [string, "null"]
           format: uuid
+          description: "Agent that created the document; null for organization-level documents"
+        org_id:
+          type: [string, "null"]
+          format: uuid
+          readOnly: true
+        scope:
+          type: string
+          enum: [agent, organization]
+          readOnly: true
+          description: "`agent`: created by this agent, writable. `organization`: shared company knowledge granted to this agent — readable, but write operations return 403 (manage it in the Dashboard)"
         title:
           type: string
         content:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Document text content (null for file-based documents)"
         source_type:
-          type: string
-          nullable: true
-          enum: [manual, pdf, csv, txt, docx]
+          type: [string, "null"]
+          enum: [manual, pdf, csv, txt, docx, website]
+          description: "`manual` for documents created via the API; Dashboard uploads carry their file type or `website`"
         source_url:
-          type: string
-          nullable: true
+          type: [string, "null"]
         status:
           type: string
-          enum: [pending, processing, completed, error]
-          description: "Processing status"
+          enum: [pending, processing, ready, error, failed]
+          description: "Processing status, managed by the pipeline (read-only)"
         chunk_count:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: "Number of chunks created for embedding"
         error_message:
-          type: string
-          nullable: true
+          type: [string, "null"]
         created_at:
           type: string
           format: date-time
@@ -2246,22 +3234,14 @@ components:
         content:
           type: string
           description: "Chunk text content"
-        embedding:
-          type: array
-          items:
-            type: number
-          nullable: true
-          description: "1536-dimensional vector (text-embedding-3-small compatible)"
         chunk_index:
           type: integer
           description: "Position within the document (0-based)"
         token_count:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: "Estimated token count"
         metadata:
-          type: object
-          nullable: true
+          type: [object, "null"]
           description: "Custom metadata (default: {})"
         created_at:
           type: string
@@ -2313,52 +3293,40 @@ components:
           type: string
           format: uuid
         call_id:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "External call ID (e.g. LiveKit)"
         customer_name:
-          type: string
-          nullable: true
+          type: [string, "null"]
         customer_request:
-          type: string
-          nullable: true
+          type: [string, "null"]
         phone_number:
-          type: string
-          nullable: true
+          type: [string, "null"]
         duration:
-          type: integer
-          nullable: true
+          type: [integer, "null"]
           description: "Call duration in seconds"
         done:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
         general_success:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
         disconnection_reason:
-          type: string
-          nullable: true
-          enum: [user_hangup, call_transfer, agent_hangup]
+          type: [string, "null"]
+          enum: [user_hangup, agent_hangup, call_transfer, unknown, busy, no_answer, dial_error]
+          description: "`busy`, `no_answer` and `dial_error` occur on outbound calls only"
         call_summary:
-          type: string
-          nullable: true
+          type: [string, "null"]
         employee:
-          type: string
-          nullable: true
+          type: [string, "null"]
           description: "Assigned employee name"
         note:
-          type: string
-          nullable: true
+          type: [string, "null"]
         agent_id:
-          type: string
+          type: [string, "null"]
           format: uuid
-          nullable: true
         is_purged:
           type: boolean
         deleted_at:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
         created_at:
           type: string
           format: date-time
@@ -2373,17 +3341,14 @@ components:
         - type: object
           properties:
             transcript:
-              type: string
-              nullable: true
+              type: [string, "null"]
               description: "JSON string of conversation messages"
             audio_file_url:
-              type: string
+              type: [string, "null"]
               format: uri
-              nullable: true
-              description: "Signed URL to the call recording (expires after 1 hour)"
+              description: "Recording URL as stored by the voice agent. Not re-signed by the API — it may have expired; use the Dashboard for playback"
             final_score:
-              type: integer
-              nullable: true
+              type: [number, "null"]
               minimum: 1
               maximum: 10
               description: "AI-generated quality score (1-10)"
@@ -2397,19 +3362,61 @@ components:
           format: uuid
         name:
           type: string
+          readOnly: true
         auto_delete_done_calls:
-          type: boolean
-          nullable: true
+          type: [boolean, "null"]
           description: "Automatically move completed calls to trash"
+        cascade_done_same_number:
+          type: boolean
+          description: "Marking a call done also marks the other open calls of the same number"
+        calendar_status_update:
+          type: boolean
+          description: "Derive employee status from connected calendars"
+        forward_call_email:
+          type: boolean
+          description: "Allow forwarding a call by e-mail from the Dashboard"
+        transfer_popup_enabled:
+          type: boolean
+          description: "Show employees a caller card with transcript on transfer"
+        notdienst_bereiche:
+          type: [array, "null"]
+          items:
+            type: string
+          description: "Selectable emergency-duty areas (null/empty = a single emergency service)"
+        max_concurrent_calls:
+          type: [integer, "null"]
+          readOnly: true
+          description: "Parallel inbound calls allowed across all numbers (null = unlimited). Managed by TalkPilot"
+        concurrency_overflow_number:
+          type: [string, "null"]
+          readOnly: true
+          description: "E.164 number overflow callers are forwarded to (null = busy tone). Managed by TalkPilot"
         created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
 
     OrganizationUpdate:
       type: object
+      description: "Writable settings. `name`, `max_concurrent_calls` and `concurrency_overflow_number` are read-only; unknown fields are ignored."
       properties:
         auto_delete_done_calls:
           type: boolean
+        cascade_done_same_number:
+          type: boolean
+        calendar_status_update:
+          type: boolean
+        forward_call_email:
+          type: boolean
+        transfer_popup_enabled:
+          type: boolean
+        notdienst_bereiche:
+          type: [array, "null"]
+          items:
+            type: string
+          description: "Trimmed and de-duplicated; empty array becomes null"
 
     # ── API Key ──
     ApiKeyInfo:
@@ -2423,15 +3430,27 @@ components:
           type: string
         key_prefix:
           type: string
-          description: "First 8 characters of the key for identification"
-          example: "tp_live_"
+          description: "First 10 characters of the key for identification"
+          example: "tp_live_a1"
+        organization_id:
+          type: string
+          format: uuid
+          description: "Home organization of the key (key management only)"
+        organization_name:
+          type: [string, "null"]
+          description: "Name of the home organization (list endpoint only)"
+        created_by_email:
+          type: [string, "null"]
+          description: "Email of the creator; null for legacy keys (list endpoint only)"
+        is_own:
+          type: boolean
+          description: "Whether the requesting user created this key (list endpoint only)"
         permissions:
           type: array
           items:
             $ref: "#/components/schemas/Permission"
         allowed_agent_ids:
-          type: array
-          nullable: true
+          type: [array, "null"]
           items:
             type: string
             format: uuid
@@ -2443,14 +3462,15 @@ components:
         is_active:
           type: boolean
         last_used_at:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
         expires_at:
+          type: [string, "null"]
+          format: date-time
+        created_at:
           type: string
           format: date-time
-          nullable: true
-        created_at:
+        updated_at:
           type: string
           format: date-time
 
@@ -2467,9 +3487,12 @@ components:
           minItems: 1
           items:
             $ref: "#/components/schemas/Permission"
+        organization_id:
+          type: string
+          format: uuid
+          description: "Home organization of the key; must be one of the caller's memberships. Defaults to the profile organization"
         allowed_agent_ids:
-          type: array
-          nullable: true
+          type: [array, "null"]
           items:
             type: string
             format: uuid
@@ -2484,9 +3507,8 @@ components:
           maximum: 10000
           default: 1000
         expires_at:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
           description: "Optional expiration date (null = never expires)"
 
     ApiKeyUpdate:
@@ -2500,8 +3522,7 @@ components:
           items:
             $ref: "#/components/schemas/Permission"
         allowed_agent_ids:
-          type: array
-          nullable: true
+          type: [array, "null"]
           items:
             type: string
             format: uuid
@@ -2532,6 +3553,8 @@ components:
         - calls:read
         - organization:read
         - organization:write
+        - contacts:read
+        - contacts:write
       description: |
         Available permissions:
         - `agents:read` — List and view agent configurations
@@ -2547,3 +3570,5 @@ components:
         - `calls:read` — List and view call records
         - `organization:read` — View organization settings
         - `organization:write` — Update organization settings
+        - `contacts:read` — List and view contacts (customer database)
+        - `contacts:write` — Create, update, delete contacts

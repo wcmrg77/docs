@@ -82,23 +82,19 @@ const updated = await talkpilot(`/agents/${agentId}`, {
 console.log(`Agent updated: ${updated.name}`);
 ```
 
-## Toggle vacation mode
+## Pause and resume an agent
 
 ```typescript
-// Enable vacation mode
+// Stop accepting calls
 await talkpilot(`/agents/${agentId}`, {
   method: "PATCH",
-  body: JSON.stringify({
-    vacation_mode: true,
-    vacation_end: "2026-04-01T00:00:00Z",
-    vacation_notdienst: true,
-  }),
+  body: JSON.stringify({ is_active: false }),
 });
 
-// Disable vacation mode
+// Resume
 await talkpilot(`/agents/${agentId}`, {
   method: "PATCH",
-  body: JSON.stringify({ vacation_mode: false }),
+  body: JSON.stringify({ is_active: true }),
 });
 ```
 
@@ -253,12 +249,20 @@ async function uploadChunks(
   title: string,
   chunksData: ChunkInput[]
 ) {
-  // 1. Create parent document
+  // 1. Create parent document (content must not be empty — the pipeline processes it)
   const doc = await talkpilot(`/agents/${agentId}/knowledge-base`, {
     method: "POST",
-    body: JSON.stringify({ title, content: "" }),
+    body: JSON.stringify({ title, content: `${title} (chunks maintained externally)` }),
   });
   const docId = doc.id;
+
+  // 1b. Wait until the pipeline has processed the placeholder
+  let status = doc.status;
+  while (status !== "ready") {
+    await new Promise((r) => setTimeout(r, 5000));
+    status = (await talkpilot(`/agents/${agentId}/knowledge-base/${docId}`)).status;
+    if (status === "error" || status === "failed") throw new Error(`Processing failed for ${docId}`);
+  }
 
   // 2. Generate embeddings
   const texts = chunksData.map((c) => c.content);
@@ -273,7 +277,8 @@ async function uploadChunks(
     metadata: chunk.metadata ?? {},
   }));
 
-  // 4. Upload chunks
+  // 4. Replace the pipeline's chunks with ours
+  await talkpilot(`/agents/${agentId}/knowledge-base/${docId}/chunks`, { method: "DELETE" });
   const result = await talkpilot(
     `/agents/${agentId}/knowledge-base/${docId}/chunks`,
     {
@@ -283,12 +288,8 @@ async function uploadChunks(
   );
   console.log(`Uploaded ${result.inserted_count} chunks for "${title}"`);
 
-  // 5. Mark document as completed
-  await talkpilot(`/agents/${agentId}/knowledge-base/${docId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status: "completed" }),
-  });
-
+  // 5. Done — the chunks are searchable right away. Do not PATCH `content`
+  //    afterwards: that re-triggers the pipeline, which rebuilds the chunks.
   return docId;
 }
 

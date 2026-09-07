@@ -1,6 +1,6 @@
 ---
-title: "Schedule & Vacation"
-description: "Set business hours, vacation mode, and backup agents"
+title: "Schedule & Backup"
+description: "Set business hours and backup agents"
 ---
 
 Control when your agent is available and what happens outside business hours.
@@ -60,35 +60,6 @@ Select another agent from your organization as a fallback:
 
 The backup agent is indicated with a badge in the agent list.
 
-## Vacation mode
+## Pausing an agent
 
-Temporarily disable an agent without changing its schedule.
-
-### Settings
-
-| Setting | Description |
-|---------|-------------|
-| **Vacation mode** | Toggle on/off |
-| **End date** | When vacation mode auto-disables (optional) |
-| **Notdienst** (Emergency service) | Keep handling emergency calls during vacation |
-
-### How it works
-
-1. **Enable vacation mode** — Agent stops accepting regular calls
-2. Set an **end date** (optional) — Vacation mode auto-disables at this time
-3. Enable **Notdienst** — Agent still handles calls from employees marked with `notdienst` status
-
-If a backup agent is configured, it handles calls while vacation mode is active.
-
-### Via API
-
-```bash
-# Enable vacation with auto-disable and emergency service
-curl -X PATCH -H "X-API-Key: $TP_KEY" -H "Content-Type: application/json" \
-  -d '{
-    "vacation_mode": true,
-    "vacation_end": "2026-04-01T00:00:00Z",
-    "vacation_notdienst": true
-  }' \
-  "$TP_BASE/agents/{agentId}"
-```
+There is no separate vacation mode any more. To pause an agent, switch it off in the agent list (or set `is_active: false` via the [Agents API](/api/agents)); calls then go to the backup agent, if one is configured. For planned absences of your staff, use the employee status (`urlaub`, `krank`, …) — see [Employee Management](/product/employee-management).

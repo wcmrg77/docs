@@ -11,7 +11,7 @@ API key management endpoints. These endpoints require **Supabase JWT authenticat
 - The raw key (`tp_live_...`) is returned **only once** at creation time — store it securely
 - Keys are SHA-256 hashed before storage and cannot be retrieved later
 - A key carries configurable permissions and agent access. Its **organization** field is only the home organization used for key management — at request time, a key's data scope is resolved from the current organization memberships of the user who created it
-- Key management is restricted to the `super_admin` and `dev_admin` roles, and only via JWT — a key cannot manage keys. Other roles (including `client_admin`) receive `403 FORBIDDEN`
+- Key management is restricted to the `dev_admin` role, and only via JWT — a key cannot manage keys. Other roles (including `client_admin`) receive `403 FORBIDDEN`
 
 ## Data model
 
@@ -67,7 +67,6 @@ GET /v1/api-keys
 Returns keys the caller is allowed to manage. Key values are never returned — only the prefix.
 
 - `dev_admin` — only keys they created themselves, across every organization those keys belong to
-- `super_admin` — all keys, including keys with no creator
 
 The same scope applies to `PATCH` and `DELETE`: a key outside it responds `404 NOT_FOUND`, whether it does not exist or belongs to someone else.
 

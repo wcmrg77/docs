@@ -7,7 +7,7 @@ Organizations are the top-level workspaces in TalkPilot. Agents, employees, and 
 
 ## Organization management
 
-Access via **Organisationen** in the sidebar (Super-Admin and Dev-Admin only).
+Access via **Organisationen** in the sidebar (Dev-Admin only).
 
 ### Each organization shows
 
@@ -33,7 +33,7 @@ Access via **Organisationen** in the sidebar (Super-Admin and Dev-Admin only).
 
 ## Multi-organization view
 
-**Available to:** Super-Admin and Dev-Admin only
+**Available to:** Dev-Admin only
 
 When you manage multiple organizations, you can view combined data across all of them:
 

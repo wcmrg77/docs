@@ -78,6 +78,6 @@ curl -X PATCH -H "X-API-Key: $TP_KEY" -H "Content-Type: application/json" \
 
 | Role | Prompt | Greeting |
 |------|:------:|:--------:|
-| Super-Admin / Dev-Admin | Edit | Edit |
+| Dev-Admin | Edit | Edit |
 | Client-Admin | Hidden | Edit |
 | Client-Employee | Hidden | Read-only |

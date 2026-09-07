@@ -45,4 +45,4 @@ When you select a **Native Realtime** provider:
 
 ## Who can edit
 
-Only **Super-Admin** and **Dev-Admin** roles can configure LLM settings. Client-Admin and Client-Employee users don't see this section.
+Only the **Dev-Admin** role can configure LLM settings. Client-Admin and Client-Employee users don't see this section.

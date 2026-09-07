@@ -39,7 +39,7 @@ Create and manage API keys for programmatic access to TalkPilot.
 
 The raw API key is shown only once at creation time. Store it securely.
 
-**Available to:** Super-Admin, Dev-Admin
+**Available to:** Dev-Admin
 
 See [Authentication](/authentication) and [API Keys API](/api/api-keys) for details.
 
@@ -56,10 +56,10 @@ Manage soft-deleted calls:
 
 Deleting a call sets `calls.hidden_at`. The row and all of its data stay in the database — the call is simply no longer visible in the dashboard or the public API, and it cannot be restored from the UI. The data is removed by the regular retention cleanup once the agent's `retention_days` (default 90) have passed, or on a GDPR erasure request.
 
-Super-Admins and Dev-Admins see a separate **Permanently deleted calls** card below the trash listing these hidden calls (read-only).
+Dev-Admins see a separate **Permanently deleted calls** card below the trash listing these hidden calls (read-only).
 
 ### Auto-delete done calls
 
 Toggle per organization: when enabled, calls marked as "done" are automatically moved to the trash. They can still be restored from the trash if needed.
 
-**Available to:** Super-Admin, Dev-Admin, Client-Admin
+**Available to:** Dev-Admin, Client-Admin

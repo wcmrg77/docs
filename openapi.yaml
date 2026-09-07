@@ -17,7 +17,7 @@ info:
     An API key can reach every organization its creator is a member of (see
     `GET /v1/organization`) and can be restricted to specific agents and permissions.
     Create and manage keys in the TalkPilot Dashboard under **Settings > API**
-    (Super-Admin and Dev-Admin only).
+    (Dev-Admin only).
 
     ## Rate Limiting
 
@@ -89,7 +89,7 @@ tags:
   - name: Organization
     description: Organization-level settings
   - name: API Keys
-    description: Manage API keys (Dashboard JWT auth only; super_admin and dev_admin)
+    description: Manage API keys (Dashboard JWT auth only; dev_admin)
 
 security:
   - apiKey: []
@@ -1882,8 +1882,7 @@ paths:
       summary: List API keys
       description: |
         Lists the API keys the caller may manage: a `dev_admin` sees the keys they
-        created themselves, a `super_admin` sees all keys. Other roles receive
-        `403 FORBIDDEN`. **Requires Supabase JWT authentication** (not API key auth).
+        created themselves. Other roles receive `403 FORBIDDEN`. **Requires Supabase JWT authentication** (not API key auth).
         The actual key values are never returned — only the prefix for identification.
       security:
         - bearerAuth: []
@@ -1938,8 +1937,7 @@ paths:
         one of the caller's memberships (otherwise `400`). The key's data scope at
         request time is resolved from the creator's memberships, not from this field.
 
-        **Requires Supabase JWT authentication** (not API key auth); `super_admin` or
-        `dev_admin` only.
+        **Requires Supabase JWT authentication** (not API key auth); `dev_admin` only.
       security:
         - bearerAuth: []
       requestBody:

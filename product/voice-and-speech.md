@@ -53,6 +53,6 @@ The STT provider transcribes the caller's speech into text for the LLM.
 
 | Role | Voice/TTS | Speaking Rate | STT |
 |------|:---------:|:------------:|:---:|
-| Super-Admin / Dev-Admin | Full | Full | Full |
+| Dev-Admin | Full | Full | Full |
 | Client-Admin | Full | Full | Hidden |
 | Client-Employee | Read-only | Read-only | Hidden |

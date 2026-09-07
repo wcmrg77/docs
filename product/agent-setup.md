@@ -11,7 +11,7 @@ How you create an agent depends on your role:
 
 | Role | Method |
 |------|--------|
-| **Super-Admin / Dev-Admin** | Create from scratch with name, phone number, and organization |
+| **Dev-Admin** | Create from scratch with name, phone number, and organization |
 | **Client-Admin / Client-Employee** | Add an existing agent by entering its phone number |
 
 ### Create from scratch (Admin)
@@ -67,8 +67,8 @@ Click on any agent to open the detail page. It's organized into sections:
 
 Not all users see the same settings:
 
-| Section | Super-Admin / Dev-Admin | Client-Admin | Client-Employee |
-|---------|:-----------------------:|:------------:|:---------------:|
+| Section | Dev-Admin | Client-Admin | Client-Employee |
+|---------|:---------:|:------------:|:---------------:|
 | Basic Info | Full | Limited | Read-only |
 | Prompt | Full | Greeting only | Read-only |
 | LLM | Full | Hidden | Hidden |

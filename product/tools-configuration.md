@@ -102,4 +102,4 @@ Toggle individual tools on or off without deleting them. Disabled tools are not 
 
 ## Who can edit
 
-Only **Super-Admin** and **Dev-Admin** can configure tools. This section is hidden for Client-Admin and Client-Employee users.
+Only **Dev-Admin** users can configure tools. This section is hidden for Client-Admin and Client-Employee users.

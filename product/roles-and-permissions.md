@@ -3,13 +3,9 @@ title: "Roles & Permissions"
 description: "Understand the role-based access control system"
 ---
 
-TalkPilot uses a 5-tier role system to control access to features and data.
+TalkPilot uses a 4-tier role system to control access to features and data.
 
 ## Roles
-
-### Super-Admin
-
-Full access to everything. Can see all organizations, all agents, and all data.
 
 ### Dev-Admin
 
@@ -17,7 +13,7 @@ Can create agents and manage phone numbers. Can only see agents they created. Fu
 
 ### Dev-Employee
 
-Read-only counterpart to Dev-Admin: sees everything a Dev-Admin sees in their assigned organizations (full agent details incl. prompt/LLM/tools/knowledge base, phone numbers page, organizations page, performance control) but has **zero write rights anywhere**. Enforced on all three layers: UI (hidden/disabled controls), Edge API (not in `JWT_WRITE_ROLES` → 403 on all writes), and RLS (`is_read_only_role()` guard on all member-reachable write policies). Assigned manually via SQL or via the invite dialog (option visible to super/dev admins only). Must never be org owner (`user_organizations.is_owner = false`) and must have `profiles.admin = false`.
+Read-only counterpart to Dev-Admin: sees everything a Dev-Admin sees in their assigned organizations (full agent details incl. prompt/LLM/tools/knowledge base, phone numbers page, organizations page, performance control) but has **zero write rights anywhere**. Enforced on all three layers: UI (hidden/disabled controls), Edge API (not in `JWT_WRITE_ROLES` → 403 on all writes), and RLS (`is_read_only_role()` guard on all member-reachable write policies). Assigned manually via SQL or via the invite dialog (option visible to Dev-Admins only). Must never be org owner (`user_organizations.is_owner = false`) and must have `profiles.admin = false`.
 
 ### Client-Admin
 
@@ -29,31 +25,31 @@ Read-only access to assigned agents. Can add existing agents by phone number. Ca
 
 ## Permission matrix
 
-| Feature | Super-Admin | Dev-Admin | Dev-Employee | Client-Admin | Client-Employee |
-|---------|:-----------:|:---------:|:------------:|:------------:|:---------------:|
-| **View all agents** | All | Own only | Assigned orgs (view) | Assigned only | Assigned only |
-| **Create agents** | Yes | Yes | No | No | No |
-| **Add agent by phone** | No | No | No | Yes | Yes |
-| **View agent prompt/LLM/tools/KB** | Yes | Yes | Yes (read-only) | No | No |
-| **Edit agent prompt** | Yes | Yes | No | No | No |
-| **Edit agent greeting** | Yes | Yes | No | Yes | No |
-| **Edit LLM settings** | Yes | Yes | No | No | No |
-| **Edit voice settings** | Yes | Yes | No | Yes | No |
-| **Configure tools** | Yes | Yes | No | No | No |
-| **Manage knowledge base** | Yes | Yes | No | No | No |
-| **Manage employees** | Yes | Yes | No | Yes | No |
-| **Configure forwarding** | Yes | Yes | No | Yes | No |
-| **Edit schedule** | Yes | Yes | No | Yes | No |
-| **View calls** | Yes | Yes | Yes | Yes | Yes |
-| **Manage calls (done, notes)** | Yes | Yes | No | Yes | No |
-| **Delete agents** | Yes | Yes | No | No | No |
-| **Phone numbers page** | Yes | Yes | View only | No | No |
-| **Organizations page** | Yes | Yes | View only | No | No |
-| **Performance control page** | Yes | Yes | Yes | No | No |
-| **Create organizations** | Yes | Yes | No | No | No |
-| **Invite users** | Yes | Yes | No | Yes | No |
-| **API key management** | Yes | Yes | No | Yes | No |
-| **Trash management** | Yes | Yes | No | Yes | No |
+| Feature | Dev-Admin | Dev-Employee | Client-Admin | Client-Employee |
+|---------|:---------:|:------------:|:------------:|:---------------:|
+| **View all agents** | Own only | Assigned orgs (view) | Assigned only | Assigned only |
+| **Create agents** | Yes | No | No | No |
+| **Add agent by phone** | No | No | Yes | Yes |
+| **View agent prompt/LLM/tools/KB** | Yes | Yes (read-only) | No | No |
+| **Edit agent prompt** | Yes | No | No | No |
+| **Edit agent greeting** | Yes | No | Yes | No |
+| **Edit LLM settings** | Yes | No | No | No |
+| **Edit voice settings** | Yes | No | Yes | No |
+| **Configure tools** | Yes | No | No | No |
+| **Manage knowledge base** | Yes | No | No | No |
+| **Manage employees** | Yes | No | Yes | No |
+| **Configure forwarding** | Yes | No | Yes | No |
+| **Edit schedule** | Yes | No | Yes | No |
+| **View calls** | Yes | Yes | Yes | Yes |
+| **Manage calls (done, notes)** | Yes | No | Yes | No |
+| **Delete agents** | Yes | No | No | No |
+| **Phone numbers page** | Yes | View only | No | No |
+| **Organizations page** | Yes | View only | No | No |
+| **Performance control page** | Yes | Yes | No | No |
+| **Create organizations** | Yes | No | No | No |
+| **Invite users** | Yes | No | Yes | No |
+| **API key management** | Yes | No | Yes | No |
+| **Trash management** | Yes | No | Yes | No |
 
 ## Client-Admin limited access mode
 
@@ -69,9 +65,9 @@ This ensures clients can customize their agent's voice and behavior without modi
 
 | Route | Required roles |
 |-------|---------------|
-| `/telefonnummern` | super_admin, dev_admin, dev_employee |
-| `/organisationen` | super_admin, dev_admin, dev_employee |
-| `/performance-control` | super_admin, dev_admin, dev_employee |
+| `/telefonnummern` | dev_admin, dev_employee |
+| `/organisationen` | dev_admin, dev_employee |
+| `/performance-control` | dev_admin, dev_employee |
 | All other routes | Any authenticated role |
 
 ## How dev_employee is enforced (technical)

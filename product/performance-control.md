@@ -48,3 +48,10 @@ Click on any call row to expand it and see:
 - Latency data
 - Transcript excerpts
 - Quality metrics
+
+## API access
+
+The same data is available programmatically via the [Performance API](/api/performance) —
+useful for partners or internal tooling that need read access to a single organization's
+QA data without a Dashboard login. Requires an API key with the `performance:read` permission,
+scoped to that organization.

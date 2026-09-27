@@ -86,6 +86,8 @@ tags:
     description: Manage agent knowledge base documents
   - name: Calls
     description: Read call records and transcripts
+  - name: Performance
+    description: Read call performance/QA data (latencies, token stats, redflags, transcript incl. tool calls)
   - name: Organization
     description: Organization-level settings
   - name: API Keys
@@ -1800,6 +1802,261 @@ paths:
           $ref: "#/components/responses/RateLimited"
 
   # ──────────────────────────────────────────
+  # Performance (Read-Only)
+  # ──────────────────────────────────────────
+  /v1/agents/{agentId}/performance:
+    get:
+      operationId: listPerformanceRecords
+      tags: [Performance]
+      summary: List performance records
+      description: |
+        Returns the QA/performance records (`call_statistics`) for the specified
+        agent — latencies, token stats, pipeline configuration and redflags.
+        Results are ordered by `created_at` descending (newest first).
+
+        The transcript is **not** included here: use
+        `GET /v1/agents/{agentId}/performance/{statisticId}` for a single record
+        with its transcript. Internal debug logs are never returned.
+
+        Requires the `performance:read` permission. With Dashboard JWT auth this
+        endpoint is restricted to the `super_admin`, `dev_admin` and
+        `dev_employee` roles, mirroring the Dashboard's Performance Analysis page.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - name: from
+          in: query
+          description: Filter records created after this date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Filter records created before this date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: List of performance records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PerformanceRecord"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+              example:
+                data:
+                  - id: "9f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f"
+                    call_id: "lk_call_abc123"
+                    caller_phone: "+491701234567"
+                    agent_phone_number: "+4930123456"
+                    agent_id: "550e8400-e29b-41d4-a716-446655440000"
+                    duration_seconds: 184
+                    disconnect_reason: "user_hangup"
+                    session_status: "completed"
+                    e2e_latency_p90: 1.42
+                    e2e_latency_median: 0.98
+                    e2e_latency_min: 0.61
+                    transcription_latency_p90: 0.31
+                    transcription_latency_median: 0.22
+                    transcription_latency_min: 0.14
+                    llm_latency_p90: 0.82
+                    llm_latency_median: 0.55
+                    llm_latency_min: 0.33
+                    tts_latency_p90: 0.29
+                    tts_latency_median: 0.21
+                    tts_latency_min: 0.12
+                    llm_total_tokens: 4820
+                    llm_prompt_tokens: 4120
+                    llm_completion_tokens: 700
+                    pre_call_variables:
+                      caller_name: "Hans Meier"
+                    extracted_variables:
+                      appointment_date: "2026-04-02"
+                    llm_provider: "openai"
+                    llm_model: "gpt-4o-mini"
+                    tts_provider: "elevenlabs"
+                    stt: "deepgram"
+                    pipeline_mode: "stt_llm_tts"
+                    created_at: "2026-03-19T10:30:00Z"
+                    final_result:
+                      outcome: true
+                      outcome_label: "success"
+                      final_score: 8
+                      summary_reasoning: "Termin erfolgreich vereinbart, keine Rueckfragen offen."
+                    prompt_fingerprint: "3b1f0c9d8e7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c"
+                    assistant_misunderstood_multiple_times:
+                      detected: false
+                      reasoning: "Keine Rueckfragen des Assistenten notwendig."
+                      score_impact: 0
+                    repeated_same_sentence:
+                      detected: false
+                      reasoning: "Keine Wiederholungen erkannt."
+                      score_impact: 0
+                    abrupt_end_without_goodbye:
+                      detected: false
+                      reasoning: "Gespraech wurde regulaer beendet."
+                      score_impact: 0
+                    connection_issue_repeated:
+                      detected: false
+                      reasoning: "Stabile Verbindung."
+                      score_impact: 0
+                    assistant_policy_violation:
+                      detected: false
+                      reasoning: "Keine Richtlinienverstoesse."
+                      score_impact: 0
+                    technical_error:
+                      detected: false
+                      reasoning: "Keine technischen Fehler."
+                      score_impact: 0
+                    early_hangup_by_caller:
+                      detected: false
+                      reasoning: "Anrufer blieb bis zum Ende in der Leitung."
+                      score_impact: 0
+                pagination:
+                  page: 1
+                  limit: 20
+                  total: 342
+                  pages: 18
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/agents/{agentId}/performance/{statisticId}:
+    get:
+      operationId: getPerformanceRecordDetails
+      tags: [Performance]
+      summary: Get performance record details
+      description: |
+        Returns a single performance record including the full `transcript`
+        (speech turns plus tool calls and their results, chronologically sorted
+        by `time_sec`).
+
+        Personal data in the transcript is partially redacted before it is
+        stored (phone numbers, e-mail addresses, IBANs and digit runs of 7+);
+        names and addresses remain in clear text. Internal debug logs are never
+        returned.
+
+        Requires the `performance:read` permission. With Dashboard JWT auth this
+        endpoint is restricted to the `super_admin`, `dev_admin` and
+        `dev_employee` roles.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/StatisticId"
+      responses:
+        "200":
+          description: Performance record details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PerformanceRecordDetail"
+              example:
+                id: "9f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f"
+                call_id: "lk_call_abc123"
+                caller_phone: "+491701234567"
+                agent_phone_number: "+4930123456"
+                agent_id: "550e8400-e29b-41d4-a716-446655440000"
+                duration_seconds: 184
+                disconnect_reason: "user_hangup"
+                session_status: "completed"
+                e2e_latency_p90: 1.42
+                e2e_latency_median: 0.98
+                e2e_latency_min: 0.61
+                transcription_latency_p90: 0.31
+                transcription_latency_median: 0.22
+                transcription_latency_min: 0.14
+                llm_latency_p90: 0.82
+                llm_latency_median: 0.55
+                llm_latency_min: 0.33
+                tts_latency_p90: 0.29
+                tts_latency_median: 0.21
+                tts_latency_min: 0.12
+                llm_total_tokens: 4820
+                llm_prompt_tokens: 4120
+                llm_completion_tokens: 700
+                pre_call_variables:
+                  caller_name: "Hans Meier"
+                extracted_variables:
+                  appointment_date: "2026-04-02"
+                llm_provider: "openai"
+                llm_model: "gpt-4o-mini"
+                tts_provider: "elevenlabs"
+                stt: "deepgram"
+                pipeline_mode: "stt_llm_tts"
+                created_at: "2026-03-19T10:30:00Z"
+                final_result:
+                  outcome: true
+                  outcome_label: "success"
+                  final_score: 8
+                  summary_reasoning: "Termin erfolgreich vereinbart, keine Rueckfragen offen."
+                prompt_fingerprint: "3b1f0c9d8e7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c"
+                assistant_misunderstood_multiple_times:
+                  detected: false
+                  reasoning: "Keine Rueckfragen des Assistenten notwendig."
+                  score_impact: 0
+                repeated_same_sentence:
+                  detected: false
+                  reasoning: "Keine Wiederholungen erkannt."
+                  score_impact: 0
+                abrupt_end_without_goodbye:
+                  detected: false
+                  reasoning: "Gespraech wurde regulaer beendet."
+                  score_impact: 0
+                connection_issue_repeated:
+                  detected: false
+                  reasoning: "Stabile Verbindung."
+                  score_impact: 0
+                assistant_policy_violation:
+                  detected: false
+                  reasoning: "Keine Richtlinienverstoesse."
+                  score_impact: 0
+                technical_error:
+                  detected: false
+                  reasoning: "Keine technischen Fehler."
+                  score_impact: 0
+                early_hangup_by_caller:
+                  detected: false
+                  reasoning: "Anrufer blieb bis zum Ende in der Leitung."
+                  score_impact: 0
+                transcript:
+                  - role: "assistant"
+                    text: "Guten Tag, Praxis Mustermann, was kann ich fuer Sie tun?"
+                    timestamp: "2026-03-19T10:30:02Z"
+                    time_sec: 2.1
+                  - role: "user"
+                    text: "Ich moechte einen Termin am zweiten April."
+                    timestamp: "2026-03-19T10:30:09Z"
+                    time_sec: 9.4
+                  - role: "tool_call_invocation"
+                    tool_call_id: "call_7Hd2"
+                    name: "check_availability"
+                    arguments: "{\"date\":\"2026-04-02\"}"
+                    time_sec: 10.8
+                  - role: "tool_call_result"
+                    tool_call_id: "call_7Hd2"
+                    successful: true
+                    content: "{\"slots\":[\"09:00\",\"14:30\"]}"
+                    time_sec: 11.6
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  # ──────────────────────────────────────────
   # Organization
   # ──────────────────────────────────────────
   /v1/organization:
@@ -2141,6 +2398,14 @@ components:
       in: path
       required: true
       description: Knowledge base document UUID
+      schema:
+        type: string
+        format: uuid
+    StatisticId:
+      name: statisticId
+      in: path
+      required: true
+      description: Performance record UUID (`call_statistics.id`)
       schema:
         type: string
         format: uuid
@@ -3535,6 +3800,209 @@ components:
         is_active:
           type: boolean
 
+    FailureCause:
+      type: object
+      description: |
+        Automated QA assessment of a single failure pattern ("redflag").
+        Written by the analysis pipeline, not by the caller.
+      properties:
+        detected:
+          type: boolean
+          description: Whether this failure pattern occurred in the call
+        reasoning:
+          type: string
+          description: Short explanation of the assessment
+        score_impact:
+          type: number
+          description: How strongly this pattern lowered the final score
+
+    PerformanceFinalResult:
+      type: object
+      description: Overall automated evaluation of the call
+      properties:
+        outcome:
+          type: [boolean, "null"]
+        outcome_label:
+          type: string
+          enum: [success, failed, neutral]
+        final_score:
+          type: number
+          description: Overall quality score of the call
+        summary_reasoning:
+          type: string
+
+    TranscriptEntry:
+      description: |
+        One entry of a performance transcript. Three kinds share a single list,
+        sorted chronologically by `time_sec` — distinguish them by `role`:
+
+        - `user` / `assistant` — a speech turn, text in `text`
+        - `tool_call_invocation` — the agent calling a tool; `arguments` is a
+          **JSON string**, not an object
+        - `tool_call_result` — the tool's answer; the payload is in `content`,
+          not in `text`
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, assistant, tool_call_invocation, tool_call_result]
+        time_sec:
+          type: number
+          description: Seconds since call start — the sort key of the list
+        text:
+          type: string
+          description: Spoken text (`user` and `assistant` entries only)
+        timestamp:
+          type: string
+          format: date-time
+          description: Wall-clock time of the speech turn
+        tool_call_id:
+          type: string
+          description: Links an invocation to its result
+        name:
+          type: string
+          description: Tool name (`tool_call_invocation` only)
+        arguments:
+          type: string
+          description: "Tool arguments as a JSON string (`tool_call_invocation` only) — parse it before use"
+        successful:
+          type: [boolean, "null"]
+          description: Whether the tool call succeeded (`tool_call_result` only)
+        content:
+          type: string
+          description: Tool result payload (`tool_call_result` only)
+      required: [role]
+
+    PerformanceRecord:
+      type: object
+      description: "Performance/QA record of one call (list view — no transcript, no internal debug logs)"
+      properties:
+        id:
+          type: string
+          format: uuid
+        call_id:
+          type: string
+          description: "External call ID (e.g. LiveKit) — links to the `calls` resource"
+        caller_phone:
+          type: [string, "null"]
+        agent_phone_number:
+          type: [string, "null"]
+        agent_id:
+          type: [string, "null"]
+          format: uuid
+        duration_seconds:
+          type: integer
+          description: Call duration in seconds
+        disconnect_reason:
+          type: [string, "null"]
+        session_status:
+          type: [string, "null"]
+        e2e_latency_p90:
+          type: [number, "null"]
+          description: End-to-end response latency, 90th percentile (seconds)
+        e2e_latency_median:
+          type: [number, "null"]
+        e2e_latency_min:
+          type: [number, "null"]
+        transcription_latency_p90:
+          type: [number, "null"]
+          description: Speech-to-text latency, 90th percentile (seconds)
+        transcription_latency_median:
+          type: [number, "null"]
+        transcription_latency_min:
+          type: [number, "null"]
+        llm_latency_p90:
+          type: [number, "null"]
+          description: Language model latency, 90th percentile (seconds)
+        llm_latency_median:
+          type: [number, "null"]
+        llm_latency_min:
+          type: [number, "null"]
+        tts_latency_p90:
+          type: [number, "null"]
+          description: Text-to-speech latency, 90th percentile (seconds)
+        tts_latency_median:
+          type: [number, "null"]
+        tts_latency_min:
+          type: [number, "null"]
+        llm_total_tokens:
+          type: [integer, "null"]
+        llm_prompt_tokens:
+          type: [integer, "null"]
+        llm_completion_tokens:
+          type: [integer, "null"]
+        pre_call_variables:
+          type: [object, "null"]
+          additionalProperties: true
+          description: Variables handed to the agent before the call started
+        extracted_variables:
+          type: [object, "null"]
+          additionalProperties: true
+          description: Variables the agent extracted during the call
+        llm_provider:
+          type: [string, "null"]
+        llm_model:
+          type: [string, "null"]
+        tts_provider:
+          type: [string, "null"]
+        stt:
+          type: [string, "null"]
+          description: Speech-to-text provider
+        pipeline_mode:
+          type: [string, "null"]
+        created_at:
+          type: [string, "null"]
+          format: date-time
+        final_result:
+          oneOf:
+            - $ref: "#/components/schemas/PerformanceFinalResult"
+            - type: "null"
+        prompt_fingerprint:
+          type: [string, "null"]
+          description: SHA-256 of the prompt template used — groups calls of the same prompt version
+        assistant_misunderstood_multiple_times:
+          oneOf:
+            - $ref: "#/components/schemas/FailureCause"
+            - type: "null"
+        repeated_same_sentence:
+          oneOf:
+            - $ref: "#/components/schemas/FailureCause"
+            - type: "null"
+        abrupt_end_without_goodbye:
+          oneOf:
+            - $ref: "#/components/schemas/FailureCause"
+            - type: "null"
+        connection_issue_repeated:
+          oneOf:
+            - $ref: "#/components/schemas/FailureCause"
+            - type: "null"
+        assistant_policy_violation:
+          oneOf:
+            - $ref: "#/components/schemas/FailureCause"
+            - type: "null"
+        technical_error:
+          oneOf:
+            - $ref: "#/components/schemas/FailureCause"
+            - type: "null"
+        early_hangup_by_caller:
+          oneOf:
+            - $ref: "#/components/schemas/FailureCause"
+            - type: "null"
+
+    PerformanceRecordDetail:
+      description: Full performance record including the transcript
+      allOf:
+        - $ref: "#/components/schemas/PerformanceRecord"
+        - type: object
+          properties:
+            transcript:
+              type: [array, "null"]
+              description: |
+                Speech turns and tool calls in one chronological list. `null` for
+                calls recorded before transcript capture was enabled.
+              items:
+                $ref: "#/components/schemas/TranscriptEntry"
+
     Permission:
       type: string
       enum:
@@ -3553,6 +4021,7 @@ components:
         - organization:write
         - contacts:read
         - contacts:write
+        - performance:read
       description: |
         Available permissions:
         - `agents:read` — List and view agent configurations
@@ -3570,3 +4039,4 @@ components:
         - `organization:write` — Update organization settings
         - `contacts:read` — List and view contacts (customer database)
         - `contacts:write` — Create, update, delete contacts
+        - `performance:read` — List and view call performance/QA data (latencies, token stats, transcript)

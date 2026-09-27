@@ -58,6 +58,7 @@
               "api/forwarding-slots",
               "api/knowledge-base",
               "api/calls",
+              "api/performance",
               "api/organization",
               "api/api-keys"
             ]
@@ -135,6 +136,13 @@
               {
                 "group": "Calls",
                 "pages": ["api-reference/calls/list-calls", "api-reference/calls/get-call-details"]
+              },
+              {
+                "group": "Performance",
+                "pages": [
+                  "api-reference/performance/list-performance-records",
+                  "api-reference/performance/get-performance-record-details"
+                ]
               },
               {
                 "group": "Organization",

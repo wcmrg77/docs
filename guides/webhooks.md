@@ -115,6 +115,14 @@ Sent after the call ends, with the full transcript.
       "time_sec": 7.5
     },
     {
+      "role": "user",
+      "text": "Ja, danke.",
+      "timestamp": "2026-09-07T10:14:47.400000+00:00",
+      "time_sec": 8.4,
+      "ignored": true,
+      "ignored_reason": "during_transfer"
+    },
+    {
       "role": "tool_call_invocation",
       "tool_call_id": "call_tc_01",
       "name": "transfer_buchhaltung",
@@ -130,7 +138,7 @@ Sent after the call ends, with the full transcript.
       "time_sec": 14.6
     }
   ],
-  "total_turns": 5,
+  "total_turns": 6,
   "pre_call_variables": {
     "kundenname": "Erika Musterfrau",
     "kundennummer": "K-10442"
@@ -153,7 +161,7 @@ Sent after the call ends, with the full transcript.
 | `call_id` | string | Stable call identifier — same value in `call_started`, the Calls API (`call_id`) and the Dashboard |
 | `caller_phone` / `called_phone` | string \| null | E.164. For outbound calls `caller_phone` is your own number and `called_phone` the dialled target |
 | `duration_seconds` | integer | Call duration |
-| `transcript` | array | Chronological entries in three shapes, see below |
+| `transcript` | array | Chronological entries in three shapes — speech, tool call, tool result — see below |
 | `total_turns` | integer | Number of transcript entries |
 | `pre_call_variables` | object | What your pre-call webhook (or an outbound API call) supplied |
 | `extracted_variables` | object | Values captured by `extract_variable` tools; outbound agents add `_call_result` |
@@ -169,11 +177,18 @@ Sent after the call ends, with the full transcript.
 
 | `role` | Fields |
 |--------|--------|
-| `user`, `assistant` | `text`, `timestamp` (ISO 8601), `time_sec` (seconds since call start) |
+| `user`, `assistant` | `text`, `timestamp` (ISO 8601), `time_sec` (seconds since call start), optional `ignored` (boolean, only `user`) and `ignored_reason` (`during_greeting` \| `during_transfer`) |
 | `tool_call_invocation` | `tool_call_id`, `name` (tool name), `arguments` (JSON **string**), `time_sec`, optional `type` (tool type, e.g. `transfer_call`) |
 | `tool_call_result` | `tool_call_id`, `successful` (boolean), `content` (JSON **string**), `time_sec` |
 
 `arguments` and `content` are JSON encoded as strings — parse them a second time if you need the fields.
+
+A `user` entry with `ignored: true` is not part of the conversation with the agent — the agent
+discarded the line, its language model never saw it. `ignored_reason` says why:
+`during_greeting` — spoken in the short pause before the greeting and discarded, usually before
+the recording starts; `during_transfer` — picked up during or after a transfer. More reasons may
+follow, so treat any unknown value as ignored as well. To show only the conversation with the
+agent (for example in a CRM note or a summary), skip these entries. `total_turns` counts them.
 
 <Note>
 The webhook carries the raw call. The customer name, request and summary you see in the Dashboard

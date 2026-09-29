@@ -3121,9 +3121,11 @@ components:
           type: [string, "null"]
           format: date
           description: "Expected return date (YYYY-MM-DD) while absent"
-        notdienst_bereich:
-          type: [string, "null"]
-          description: "Emergency-duty area of the current shift (one of the organization's `notdienst_bereiche`). Cleared automatically when the status leaves `notdienst`"
+        notdienst_bereiche:
+          type: [array, "null"]
+          items:
+            type: string
+          description: "Emergency-duty areas of the current shift (from the organization's `notdienst_bereiche`; one employee can cover several). Cleared automatically when the status leaves `notdienst`"
         created_at:
           type: string
           format: date-time
@@ -3156,9 +3158,11 @@ components:
         back_at_work_at:
           type: [string, "null"]
           format: date
-        notdienst_bereich:
-          type: [string, "null"]
-          description: "Only kept when status is `notdienst`"
+        notdienst_bereiche:
+          type: [array, "null"]
+          items:
+            type: string
+          description: "Only kept when status is `notdienst`. Trimmed and de-duplicated; empty array becomes null. Required (at least one area) for status `notdienst` when the organization has more than one `notdienst_bereiche` entry"
 
     EmployeeUpdate:
       type: object
@@ -3183,9 +3187,11 @@ components:
         back_at_work_at:
           type: [string, "null"]
           format: date
-        notdienst_bereich:
-          type: [string, "null"]
-          description: "Only kept when status is `notdienst`; a status change away from it clears the area"
+        notdienst_bereiche:
+          type: [array, "null"]
+          items:
+            type: string
+          description: "Only kept while status is `notdienst`; a status change away from it clears the areas. Trimmed and de-duplicated; empty array becomes null. At least one area is required while status is `notdienst` if the organization has more than one `notdienst_bereiche` entry"
 
     EmployeeStatus:
       type: string

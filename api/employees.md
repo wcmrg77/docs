@@ -33,7 +33,7 @@ Each employee has a status indicating their availability:
 | `agent_id` | uuid | Parent agent |
 | `organization_id` | uuid | Organization (read-only, derived from the agent) |
 | `back_at_work_at` | date | Expected return date while absent (`YYYY-MM-DD`) |
-| `notdienst_bereich` | string | Emergency-duty area of the current shift, one of the organization's `notdienst_bereiche`. Only kept while `status` is `notdienst`; any other status clears it |
+| `notdienst_bereiche` | string[] | Emergency-duty areas of the current shift, taken from the organization's `notdienst_bereiche` — one employee can cover several at once. Only kept while `status` is `notdienst`; any other status clears them. Trimmed and de-duplicated; an empty list becomes `null`. If the organization has more than one area, status `notdienst` requires at least one |
 | `created_at` | datetime | Creation timestamp |
 | `updated_at` | datetime | Last update timestamp |
 
@@ -99,7 +99,7 @@ PATCH /v1/agents/{agentId}/employees/{employeeId}
 
 **Permission:** `employees:write`
 
-Common use case: changing the status (e.g., marking an employee as on vacation). Updatable: `name`, `phone_number`, `email`, `status`, `active`, `get_mail`, `back_at_work_at`, `notdienst_bereich`; unknown fields are ignored.
+Common use case: changing the status (e.g., marking an employee as on vacation). Updatable: `name`, `phone_number`, `email`, `status`, `active`, `get_mail`, `back_at_work_at`, `notdienst_bereiche`; unknown fields are ignored.
 
 ```bash
 # Mark as on vacation
@@ -107,9 +107,9 @@ curl -X PATCH -H "X-API-Key: $TP_KEY" -H "Content-Type: application/json" \
   -d '{"status": "urlaub", "back_at_work_at": "2026-09-22"}' \
   "$TP_BASE/agents/{agentId}/employees/{employeeId}"
 
-# Emergency duty for the electrical area
+# Emergency duty for the electrical and security areas
 curl -X PATCH -H "X-API-Key: $TP_KEY" -H "Content-Type: application/json" \
-  -d '{"status": "notdienst", "notdienst_bereich": "Elektro"}' \
+  -d '{"status": "notdienst", "notdienst_bereiche": ["Elektro", "Sicherheit"]}' \
   "$TP_BASE/agents/{agentId}/employees/{employeeId}"
 ```
 

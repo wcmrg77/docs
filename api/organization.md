@@ -95,7 +95,7 @@ When enabled, calls that are marked as `done` (processed) are automatically move
 
 ### notdienst_bereiche
 
-The list an employee's `notdienst_bereich` is chosen from. Values are trimmed and de-duplicated; an empty list is stored as null (single emergency service, Dashboard dropdown unchanged).
+The list an employee's `notdienst_bereiche` are chosen from; with more than one entry, an employee on emergency duty needs at least one area. Values are trimmed and de-duplicated; an empty list is stored as null (single emergency service, Dashboard dropdown unchanged).
 
 ## Related resources
 

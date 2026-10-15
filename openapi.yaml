@@ -2712,9 +2712,11 @@ components:
       type: object
       required: [greeting]
       description: |
-        Needs `greeting` plus at least one condition (`tag`, a time window `from`+`to`,
-        or `min_calls_today`). Several conditions are combined with AND; the order of
-        the variants is the priority. Unknown keys are rejected.
+        Needs `greeting` plus at least one condition (`tag` or `tags`, a time window
+        `from`+`to`, or `min_calls_today`). Several conditions are combined with AND; the
+        order of the variants is the priority — if a contact carries tags of several
+        variants, the topmost matching variant wins. Use either `tag` or `tags`, not both.
+        Unknown keys are rejected.
       properties:
         greeting:
           type: string
@@ -2722,6 +2724,14 @@ components:
         tag:
           type: string
           description: "A tag of the caller's contact (customer database), compared case-insensitively"
+        tags:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+          description: "Several contact tags; any one of them is enough (OR), compared case-insensitively. Alternative to `tag`"
         from:
           type: string
           pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"

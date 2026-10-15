@@ -81,16 +81,18 @@ Days: `0` = Sunday, `1` = Monday, ..., `6` = Saturday.
 ```json
 [
   { "tag": "stammkunde", "greeting": "Guten Tag {{anrede}} {{nachname}}, schön, dass Sie anrufen." },
+  { "tags": ["mitarbeiter", "partner"], "greeting": "Hallo {{vorname}}!" },
   { "from": "18:00", "to": "07:00", "greeting": "Guten Abend, Sie erreichen den Nachtdienst." },
   { "min_calls_today": 2, "greeting": "Schön, dass Sie noch einmal anrufen." }
 ]
 ```
 
-The first variant whose conditions all match wins; otherwise the plain `greeting` is spoken. Each variant needs `greeting` and at least one condition:
+The first variant whose conditions all match wins; otherwise the plain `greeting` is spoken. With several tags one of them is enough; if a contact carries tags of several variants, the topmost variant wins. Each variant needs `greeting` and at least one condition:
 
 | Condition | Meaning |
 |-----------|---------|
 | `tag` | The caller's contact (customer database) carries this tag, case-insensitive |
+| `tags` | List of 1–20 tags; the contact needs to carry any one of them (OR). Use either `tag` or `tags`, not both |
 | `from` + `to` | Time window, `HH:MM` Europe/Berlin, start inclusive / end exclusive; `from` > `to` wraps past midnight. Both required |
 | `min_calls_today` | Caller has already called at least this many times today (integer ≥ 1) |
 

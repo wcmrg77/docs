@@ -71,9 +71,11 @@
                 "group": "Agents",
                 "pages": [
                   "api-reference/agents/list-agents",
+                  "api-reference/agents/create-an-agent",
                   "api-reference/agents/get-agent-details",
                   "api-reference/agents/update-agent-settings",
-                  "api-reference/agents/get-agent-status"
+                  "api-reference/agents/get-agent-status",
+                  "api-reference/agents/assign-a-phone-number"
                 ]
               },
               {

@@ -185,6 +185,85 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
 
+    post:
+      operationId: createAgent
+      tags: [Agents]
+      summary: Create an agent
+      description: |
+        Creates a new agent in one of your organizations. The agent starts
+        **without a phone number** and is therefore not reachable until a number
+        (or a WhatsApp binding) is assigned.
+
+        **Dashboard login only:** requires a JWT of a `super_admin` or `dev_admin`.
+        API keys are rejected with `403 FORBIDDEN`, even with `agents:write`.
+
+        `organization_id` and `name` are required; every other field is optional
+        and accepts the same values as `PATCH /v1/agents/{agentId}`. Omitted fields
+        get the same defaults as in the dashboard: empty prompt, `language: de`,
+        `speaking_rate: 1.0`, `is_active: true`, `llm_provider: azure`,
+        `llm_model: gpt-4.1`, and a voice matching the LLM provider (Cartesia
+        "Alina" with Deepgram STT by default; `Puck` for `gemini_live`, `marin` for
+        `openai_realtime`).
+
+        `phone_number`, `created_by`, `id` and unknown fields are rejected with
+        `400 VALIDATION_ERROR`. An `organization_id` you are not a member of
+        returns `404 NOT_FOUND`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentCreate"
+            example:
+              organization_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+              name: "Rezeption Bot"
+              prompt: "Du bist ein freundlicher Rezeptionsbot..."
+              greeting: "Guten Tag, wie kann ich Ihnen helfen?"
+      responses:
+        "201":
+          description: Created agent (without phone number)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: |
+            Called with an API key, or the dashboard role is not `super_admin`/`dev_admin`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                apiKey:
+                  value:
+                    error:
+                      code: FORBIDDEN
+                      message: "Agent-Anlage nur mit Dashboard-Login (JWT), nicht per API-Key"
+                      request_id: "req_abc123"
+                role:
+                  value:
+                    error:
+                      code: FORBIDDEN
+                      message: "Insufficient role for permission: agents:write"
+                      request_id: "req_abc123"
+        "404":
+          description: The organization does not exist or you are not a member of it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: "Organization not found"
+                  request_id: "req_abc123"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
   /v1/agents/{agentId}:
     get:
       operationId: getAgent
@@ -295,7 +374,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          $ref: "#/components/responses/ForbiddenClientAdmin"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -347,6 +426,108 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/agents/{agentId}/phone-number:
+    post:
+      operationId: assignPhoneNumber
+      tags: [Agents]
+      summary: Assign a phone number
+      description: |
+        Assigns a free number from the TalkPilot number pool to the agent. The
+        numbers in the pool are already fully wired, so the agent answers calls
+        on the new number from the next call on.
+
+        **Dashboard login only:** requires a JWT of a `super_admin` or `dev_admin`.
+        API keys are rejected with `403 FORBIDDEN`, even with `agents:write`.
+
+        The only supported `source` is `pool`. An agent that already has a phone
+        number gets `409 AGENT_HAS_NUMBER`; if no pool number is free, the
+        response is `409 POOL_EMPTY`.
+
+        When the agent is deleted later, the number goes into a 90-day
+        quarantine and then returns to the pool automatically.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source]
+              additionalProperties: false
+              properties:
+                source:
+                  type: string
+                  enum: [pool]
+                  description: Where the number comes from. Only `pool` is supported.
+            example:
+              source: pool
+      responses:
+        "201":
+          description: Phone number assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [phone_number, pool_remaining]
+                properties:
+                  phone_number:
+                    type: string
+                    description: Assigned number in E.164 format
+                  pool_remaining:
+                    type: integer
+                    description: Number of pool numbers that are still assignable afterwards
+              example:
+                phone_number: "+4930123456789"
+                pool_remaining: 4
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: |
+            Called with an API key, or the dashboard role is not `super_admin`/`dev_admin`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                apiKey:
+                  value:
+                    error:
+                      code: FORBIDDEN
+                      message: "Nummern-Zuweisung nur mit Dashboard-Login (JWT), nicht per API-Key"
+                      request_id: "req_abc123"
+                role:
+                  value:
+                    error:
+                      code: FORBIDDEN
+                      message: "Insufficient role for permission: agents:write"
+                      request_id: "req_abc123"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The agent already has a phone number, or the pool is empty
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                agentHasNumber:
+                  value:
+                    error:
+                      code: AGENT_HAS_NUMBER
+                      message: "Agent already has a phone number"
+                      request_id: "req_abc123"
+                poolEmpty:
+                  value:
+                    error:
+                      code: POOL_EMPTY
+                      message: "Keine freie Pool-Nummer — `provision_number.py pool-auffuellen`"
+                      request_id: "req_abc123"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -446,7 +627,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          $ref: "#/components/responses/ForbiddenClientAdmin"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -628,7 +809,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          $ref: "#/components/responses/ForbiddenClientAdmin"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -691,7 +872,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          $ref: "#/components/responses/ForbiddenClientAdmin"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -710,7 +891,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          $ref: "#/components/responses/ForbiddenClientAdmin"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -2455,6 +2636,41 @@ components:
               code: UNAUTHORIZED
               message: "Invalid or missing API key"
               request_id: "req_abc123"
+    ForbiddenClientAdmin:
+      description: |
+        Insufficient permissions (`FORBIDDEN`), or the agent is outside the key's
+        `allowed_agent_ids` (`AGENT_NOT_ACCESSIBLE`).
+
+        client_admin (dashboard login): only name, greeting, voice, language and
+        audio settings of an agent may be changed. Any other agent field, tools
+        and the workflow are rejected with `FORBIDDEN` — the same limits as in the
+        dashboard. API keys are not affected.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            clientAdminField:
+              value:
+                error:
+                  code: FORBIDDEN
+                  message: "Insufficient role for fields"
+                  details:
+                    - field: prompt
+                      message: "client_admin may not change 'prompt'"
+                  request_id: "req_abc123"
+            clientAdminRole:
+              value:
+                error:
+                  code: FORBIDDEN
+                  message: "Insufficient role for permission: tools:write"
+                  request_id: "req_abc123"
+            missingPermission:
+              value:
+                error:
+                  code: FORBIDDEN
+                  message: "API key lacks required permission: agents:write"
+                  request_id: "req_abc123"
     Forbidden:
       description: |
         Insufficient permissions (`FORBIDDEN`), or the agent is outside the key's
@@ -2546,6 +2762,8 @@ components:
                 - AGENT_NOT_ACCESSIBLE
                 - NOT_FOUND
                 - CONFLICT
+                - AGENT_HAS_NUMBER
+                - POOL_EMPTY
                 - RATE_LIMITED
                 - INTERNAL_ERROR
             message:
@@ -2841,6 +3059,24 @@ components:
         aic_enhancement_enabled:
           type: boolean
 
+    AgentCreate:
+      description: |
+        New agent. `organization_id` and `name` are required, all other fields
+        are optional and accept the same values as `AgentUpdate`.
+      allOf:
+        - $ref: "#/components/schemas/AgentUpdate"
+        - type: object
+          required: [organization_id, name]
+          properties:
+            organization_id:
+              type: string
+              format: uuid
+              description: One of your organizations
+            name:
+              type: string
+              minLength: 1
+              maxLength: 200
+              description: Trimmed; 1–200 characters
     AgentSchedule:
       type: [object, "null"]
       description: |

@@ -43,7 +43,8 @@ The STT provider transcribes the caller's speech into text for the LLM.
 
 | Provider | Notes |
 |----------|-------|
-| **Deepgram** | Default. Fast and accurate for German and English. |
+| **Soniox** | Default for new agents. |
+| **Deepgram** | Fast and accurate for German and English. |
 | **ElevenLabs** | Good multilingual support |
 | **Mistral** | Alternative option |
 

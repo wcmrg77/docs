@@ -202,7 +202,7 @@ paths:
         get the same defaults as in the dashboard: empty prompt, `language: de`,
         `speaking_rate: 1.0`, `is_active: true`, `llm_provider: azure`,
         `llm_model: gpt-4.1`, and a voice matching the LLM provider (Cartesia
-        "Alina" with Deepgram STT by default; `Puck` for `gemini_live`, `marin` for
+        "Alina" (German) with Soniox STT by default; `Puck` for `gemini_live`, `marin` for
         `openai_realtime`).
 
         `phone_number`, `created_by`, `id` and unknown fields are rejected with
@@ -2842,8 +2842,8 @@ components:
           maximum: 2.0
         stt_provider:
           type: [string, "null"]
-          enum: [deepgram, elevenlabs, mistral, groq]
-          description: "Speech-to-text provider (null for native realtime)"
+          enum: [soniox, flux, deepgram, elevenlabs, mistral, groq, assemblyai, cartesia]
+          description: "Speech-to-text provider (null for native realtime). `soniox` is the default for new agents, `flux` is Deepgram Flux, `deepgram` is Deepgram Nova-3."
         stt_keywords:
           type: [array, "null"]
           maxItems: 100
@@ -3007,6 +3007,8 @@ components:
           maximum: 2.0
         stt_provider:
           type: [string, "null"]
+          enum: [soniox, flux, deepgram, elevenlabs, mistral, groq, assemblyai, cartesia]
+          description: "Speech-to-text provider. `soniox` is the default for new agents; null for native realtime providers."
         stt_keywords:
           type: [array, "null"]
           maxItems: 100

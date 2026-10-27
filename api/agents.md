@@ -30,7 +30,7 @@ Agents are the central entity in TalkPilot — AI voice bots that handle phone c
 | `voice_id` | string | Voice identifier for TTS |
 | `realtime_voice` | string | Voice for native realtime providers |
 | `speaking_rate` | number | Speech speed (0.5 - 2.0) |
-| `stt_provider` | string | `deepgram`, `elevenlabs`, `mistral`, `groq` (null for realtime) |
+| `stt_provider` | string | `soniox` (default for new agents), `flux` (Deepgram Flux), `deepgram` (Deepgram Nova-3), `elevenlabs`, `mistral`, `groq`, `assemblyai`, `cartesia` (null for realtime) |
 | `stt_keywords` | string[] | Words the speech recognizer should prefer (names, products), max 100 |
 | `prompt` | string | System prompt (max 50,000 chars) |
 | `greeting` | string | Initial greeting message (max 2,000 chars) |

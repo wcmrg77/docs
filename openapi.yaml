@@ -446,8 +446,13 @@ paths:
         number gets `409 AGENT_HAS_NUMBER`; if no pool number is free, the
         response is `409 POOL_EMPTY`.
 
-        When the agent is deleted later, the number goes into a 90-day
-        quarantine and then returns to the pool automatically.
+        The number is also written to the agent's employees and forwarding
+        slots (`agent_phone_number`), which is how call routing finds them at
+        runtime.
+
+        When the number is released (`DELETE`) or the agent is deleted later,
+        the number goes into a 90-day quarantine and then returns to the pool
+        automatically.
       parameters:
         - $ref: "#/components/parameters/AgentId"
       requestBody:
@@ -528,6 +533,69 @@ paths:
                       code: POOL_EMPTY
                       message: "Keine freie Pool-Nummer — `provision_number.py pool-auffuellen`"
                       request_id: "req_abc123"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+    delete:
+      operationId: releasePhoneNumber
+      tags: [Agents]
+      summary: Release a phone number
+      description: |
+        Releases the agent's pool number: the agent loses the number from the
+        next call on, and the number goes into a 90-day quarantine before it
+        returns to the pool. The `agent_phone_number` of the agent's employees
+        and forwarding slots is cleared as well.
+
+        **Dashboard login only:** requires a JWT of a `super_admin` or `dev_admin`.
+        API keys are rejected with `403 FORBIDDEN`, even with `agents:write`.
+
+        Only numbers assigned from the pool can be released. A number that was
+        provisioned individually for the agent is rejected with
+        `409 NOT_POOL_NUMBER`; an agent without a number gets `404 NOT_FOUND`.
+
+        The Agent Builder calls this when a session is cancelled after the
+        test call, so the number does not stay bound to an unfinished agent.
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+      responses:
+        "204":
+          description: Phone number released
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: |
+            Called with an API key, or the dashboard role is not `super_admin`/`dev_admin`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: FORBIDDEN
+                  message: "Nummern-Freigabe nur mit Dashboard-Login (JWT), nicht per API-Key"
+                  request_id: "req_abc123"
+        "404":
+          description: Agent not found, or the agent has no phone number
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: "Agent has no phone number"
+                  request_id: "req_abc123"
+        "409":
+          description: The agent's number is not a pool number
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: NOT_POOL_NUMBER
+                  message: "Only pool numbers can be released via the API"
+                  request_id: "req_abc123"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -960,6 +1028,11 @@ paths:
       operationId: createEmployee
       tags: [Employees]
       summary: Create an employee
+      description: |
+        Creates the employee and links it to the agent in the same request
+        (the link is what the dashboard's agent detail page and the runtime
+        lookup by agent use). If the link cannot be written, the employee is
+        not created and the request returns `500`.
       parameters:
         - $ref: "#/components/parameters/AgentId"
       requestBody:
@@ -1325,6 +1398,11 @@ paths:
       description: |
         Returns all forwarding slots for the specified agent, ordered by slot number.
         Forwarding slots define how calls are routed to employees based on case type.
+
+        Each priority is either the name of a transfer tool of the agent
+        (`transfer_to_<name>`, e.g. `transfer_to_melanie_bender` — the agent
+        transfers the call) or a plain text the agent reads out instead of
+        transferring (e.g. `Allgemeines Postfach` or `Rückruf vereinbaren`).
       parameters:
         - $ref: "#/components/parameters/AgentId"
       responses:
@@ -1344,18 +1422,20 @@ paths:
                   - id: "slot-uuid-1"
                     slotnummer: "01"
                     cases: "Rechnungsfragen, Zahlungsprobleme"
-                    slot_belegung: "Max Mustermann"
-                    prioritaet_1: "+491701234567"
-                    prioritaet_2: "+491709876543"
+                    slot_belegung: "transfer_to_max_mustermann"
+                    prioritaet_1: "transfer_to_max_mustermann"
+                    prioritaet_2: "Rückruf vereinbaren -> Allgemeines Postfach"
                     prioritaet_3: null
+                    kunde: "Beispiel GmbH"
                     agent_id: "550e8400-e29b-41d4-a716-446655440000"
                   - id: "slot-uuid-2"
                     slotnummer: "02"
                     cases: "Technischer Support"
-                    slot_belegung: "Erika Musterfrau"
-                    prioritaet_1: "+491705555555"
-                    prioritaet_2: null
+                    slot_belegung: "transfer_to_erika_musterfrau"
+                    prioritaet_1: "transfer_to_erika_musterfrau"
+                    prioritaet_2: "transfer_to_max_mustermann"
                     prioritaet_3: null
+                    kunde: "Beispiel GmbH"
                     agent_id: "550e8400-e29b-41d4-a716-446655440000"
         "401":
           $ref: "#/components/responses/Unauthorized"
@@ -1368,6 +1448,11 @@ paths:
       operationId: createForwardingSlot
       tags: [Forwarding Slots]
       summary: Create a forwarding slot
+      description: |
+        The slot is linked to the agent and to the agent's phone number
+        (`agent_phone_number`), which is how call routing finds it at runtime.
+        Slots created before the agent got its number are updated when a pool
+        number is assigned.
       parameters:
         - $ref: "#/components/parameters/AgentId"
       requestBody:
@@ -1379,9 +1464,9 @@ paths:
             example:
               slotnummer: "03"
               cases: "Vertragsfragen"
-              slot_belegung: "Anna Schmidt"
-              prioritaet_1: "+491701111111"
-              prioritaet_2: "+491702222222"
+              slot_belegung: "transfer_to_anna_schmidt"
+              prioritaet_1: "transfer_to_anna_schmidt"
+              prioritaet_2: "Rückruf vereinbaren -> Allgemeines Postfach"
       responses:
         "201":
           description: Forwarding slot created
@@ -1409,7 +1494,8 @@ paths:
 
         Atomic: every slot is validated first (each needs `slotnummer` and `cases`;
         invalid rows are rejected with `400` and nothing is written), then the old
-        slots are replaced in a single transaction.
+        slots are replaced in a single transaction. The new slots are linked to
+        the agent's phone number (`agent_phone_number`) like single creates.
       parameters:
         - $ref: "#/components/parameters/AgentId"
       requestBody:
@@ -1428,13 +1514,16 @@ paths:
               slots:
                 - slotnummer: "01"
                   cases: "Rechnungsfragen"
-                  slot_belegung: "Max Mustermann"
-                  prioritaet_1: "+491701234567"
+                  slot_belegung: "transfer_to_max_mustermann"
+                  prioritaet_1: "transfer_to_max_mustermann"
+                  prioritaet_2: "Rückruf vereinbaren -> Allgemeines Postfach"
+                  kunde: "Beispiel GmbH"
                 - slotnummer: "02"
                   cases: "Technischer Support"
-                  slot_belegung: "Erika Musterfrau"
-                  prioritaet_1: "+491705555555"
-                  prioritaet_2: "+491706666666"
+                  slot_belegung: "transfer_to_erika_musterfrau"
+                  prioritaet_1: "transfer_to_erika_musterfrau"
+                  prioritaet_2: "transfer_to_max_mustermann"
+                  kunde: "Beispiel GmbH"
       responses:
         "200":
           description: All slots replaced
@@ -1475,7 +1564,7 @@ paths:
               $ref: "#/components/schemas/ForwardingSlotUpdate"
             example:
               cases: "Rechnungsfragen, Mahnungen"
-              prioritaet_2: "+491703333333"
+              prioritaet_2: "transfer_to_erika_musterfrau"
       responses:
         "200":
           description: Updated slot
@@ -2764,6 +2853,7 @@ components:
                 - CONFLICT
                 - AGENT_HAS_NUMBER
                 - POOL_EMPTY
+                - NOT_POOL_NUMBER
                 - RATE_LIMITED
                 - INTERNAL_ERROR
             message:
@@ -3599,16 +3689,16 @@ components:
           example: "Rechnungsfragen, Zahlungsprobleme"
         slot_belegung:
           type: [string, "null"]
-          description: "Name of the person assigned to this slot"
+          description: "Primary target of the slot, by convention the same value as `prioritaet_1`"
         prioritaet_1:
           type: [string, "null"]
-          description: "Primary contact (name or phone number)"
+          description: "Primary target: a transfer tool of the agent (`transfer_to_<name>`) or a text the agent reads out instead of transferring (e.g. `Allgemeines Postfach`)"
         prioritaet_2:
           type: [string, "null"]
-          description: "Secondary contact (fallback)"
+          description: "Fallback when the primary target is unavailable (same format, e.g. `Rückruf vereinbaren -> Allgemeines Postfach`)"
         prioritaet_3:
           type: [string, "null"]
-          description: "Tertiary contact (fallback)"
+          description: "Second fallback (same format)"
         kunde:
           type: [string, "null"]
           description: "Free-text customer/segment label for this slot"

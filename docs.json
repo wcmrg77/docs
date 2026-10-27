@@ -75,7 +75,8 @@
                   "api-reference/agents/get-agent-details",
                   "api-reference/agents/update-agent-settings",
                   "api-reference/agents/get-agent-status",
-                  "api-reference/agents/assign-a-phone-number"
+                  "api-reference/agents/assign-a-phone-number",
+                  "api-reference/agents/release-a-phone-number"
                 ]
               },
               {

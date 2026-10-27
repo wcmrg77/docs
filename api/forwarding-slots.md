@@ -9,9 +9,16 @@ Forwarding slots define how the AI agent routes calls to the right person. Each 
 
 1. The AI agent identifies the caller's issue during the conversation
 2. It matches the issue to a slot via the `cases` field
-3. The agent tries the **Priority 1** contact first
+3. The agent tries the **Priority 1** target first
 4. If unavailable, falls back to **Priority 2**, then **Priority 3**
-5. If all contacts fail, the agent handles the call based on its configuration
+5. If all targets fail, the agent handles the call based on its configuration
+
+Each priority is one of two things:
+
+- the name of a **transfer tool** of the agent, `transfer_to_<name>` (lowercase, umlauts as `ae`/`oe`/`ue`, everything else as `_`, e.g. `transfer_to_melanie_bender`) — the agent transfers the call to that employee if they are available
+- a **plain text** the agent reads out instead of transferring, e.g. `Allgemeines Postfach` or `Rückruf vereinbaren -> Allgemeines Postfach` — the caller is offered a callback
+
+Slots are linked to the agent's phone number (`agent_phone_number`) automatically: the API copies it when a slot is written and updates existing slots when a pool number is [assigned](/api/agents#phone-number) or released.
 
 ## Data model
 
@@ -20,10 +27,10 @@ Forwarding slots define how the AI agent routes calls to the right person. Each 
 | `id` | uuid | Slot identifier |
 | `slotnummer` | string | Two-digit slot number (`"01"`, `"02"`, etc.) |
 | `cases` | string | Comma-separated case types (e.g., `"Billing, Payments"`) |
-| `slot_belegung` | string | Name of the person assigned to this slot |
-| `prioritaet_1` | string | Primary contact (phone number or name) |
-| `prioritaet_2` | string | Secondary fallback contact |
-| `prioritaet_3` | string | Tertiary fallback contact |
+| `slot_belegung` | string | Primary target, by convention the same value as `prioritaet_1` |
+| `prioritaet_1` | string | Primary target: `transfer_to_<name>` or a text to read out |
+| `prioritaet_2` | string | Fallback target (same format) |
+| `prioritaet_3` | string | Second fallback target (same format) |
 | `kunde` | string | Free-text customer/segment label for the slot |
 | `agent_id` | uuid | Parent agent |
 | `created_at` | datetime | Creation timestamp |
@@ -54,9 +61,9 @@ curl -X POST -H "X-API-Key: $TP_KEY" -H "Content-Type: application/json" \
   -d '{
     "slotnummer": "01",
     "cases": "Rechnungsfragen, Zahlungsprobleme",
-    "slot_belegung": "Max Mustermann",
-    "prioritaet_1": "+491701234567",
-    "prioritaet_2": "+491709876543"
+    "slot_belegung": "transfer_to_max_mustermann",
+    "prioritaet_1": "transfer_to_max_mustermann",
+    "prioritaet_2": "Rückruf vereinbaren -> Allgemeines Postfach"
   }' \
   "$TP_BASE/agents/{agentId}/forwarding-slots"
 ```
@@ -96,15 +103,16 @@ curl -X PUT -H "X-API-Key: $TP_KEY" -H "Content-Type: application/json" \
       {
         "slotnummer": "01",
         "cases": "Rechnungsfragen",
-        "slot_belegung": "Max Mustermann",
-        "prioritaet_1": "+491701234567"
+        "slot_belegung": "transfer_to_max_mustermann",
+        "prioritaet_1": "transfer_to_max_mustermann",
+        "prioritaet_2": "Rückruf vereinbaren -> Allgemeines Postfach"
       },
       {
         "slotnummer": "02",
         "cases": "Technischer Support",
-        "slot_belegung": "Erika Musterfrau",
-        "prioritaet_1": "+491705555555",
-        "prioritaet_2": "+491706666666"
+        "slot_belegung": "transfer_to_erika_musterfrau",
+        "prioritaet_1": "transfer_to_erika_musterfrau",
+        "prioritaet_2": "transfer_to_max_mustermann"
       }
     ]
   }' \
@@ -125,6 +133,7 @@ Response includes `replaced_count` — the number of previous slots that were re
 - Use `PUT` for full sync from external systems, `POST`/`PATCH`/`DELETE` for individual changes
 - Slot numbers should be sequential two-digit strings: `"01"`, `"02"`, `"03"`
 - Keep `cases` descriptive — the AI uses this text to match caller issues
+- Use `transfer_to_<name>` only for employees that exist on the agent with a matching name (see [Tools](/api/tools) for transfer tools); anything else is read out as text
 
 ## Related resources
 

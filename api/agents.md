@@ -176,6 +176,19 @@ curl -X PATCH -H "X-API-Key: $TP_KEY" -H "Content-Type: application/json" \
   "$TP_BASE/agents/550e8400-e29b-41d4-a716-446655440000"
 ```
 
+### Phone number
+
+```
+POST   /v1/agents/{agentId}/phone-number
+DELETE /v1/agents/{agentId}/phone-number
+```
+
+**Permission:** `agents:write` | **Dashboard login only** (JWT of a `super_admin` or `dev_admin`; API keys get `403`)
+
+`POST` with `{ "source": "pool" }` assigns a free number from the TalkPilot number pool; the agent answers on it from the next call on. `DELETE` releases a pool number again — the number goes into a 90-day quarantine before it returns to the pool. Numbers that were provisioned individually for an agent cannot be released this way (`409 NOT_POOL_NUMBER`).
+
+Both calls keep the agent's [employees](/api/employees) and [forwarding slots](/api/forwarding-slots) in sync: their `agent_phone_number` is set on assignment and cleared on release, which is how call routing finds them at runtime.
+
 ## Common patterns
 
 ### Pause an agent temporarily

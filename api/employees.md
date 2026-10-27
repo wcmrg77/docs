@@ -78,6 +78,8 @@ POST /v1/agents/{agentId}/employees
 
 **Required fields:** `name`
 
+The employee is linked to the agent in the same request (the link is what the agent detail page in the dashboard and the runtime lookup by agent use). If the link cannot be written, the employee is not created and the request returns `500`.
+
 ```bash
 curl -X POST -H "X-API-Key: $TP_KEY" -H "Content-Type: application/json" \
   -d '{

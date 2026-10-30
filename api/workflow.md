@@ -29,7 +29,7 @@ Single-prompt agents have no workflow. For them this endpoint returns `null`.
 | `id` | string | yes | Unique within the workflow (1–50 chars) |
 | `name` | string | yes | Display name (1–100 chars) |
 | `description` | string | yes | The instructions for this state (1–20000 chars) |
-| `completion` | string | yes | When this state is considered done (1–500 chars) |
+| `completion` | string | yes | When this state is considered done (1–2000 chars) |
 | `step_type` | string | no | `prompt` (default) or `action` |
 | `tools` | array | no | Tool names available in this state (max 20) |
 | `next` | array | no | Allowed follow-up states, `[{ "id": "..." }]` (max 10) |
